@@ -1,3 +1,4 @@
+
 use rusqlite::{params, Connection, Result};
 use std::fs;
 use zip::ZipArchive;
@@ -15,8 +16,6 @@ struct FileEntry {
 
 // Fungsi untuk mendapatkan path database
 fn get_db_path() -> String {
-    // Untuk kesederhanaan, kita simpan DB di direktori saat ini.
-    // Dalam aplikasi nyata, pertimbangkan untuk menggunakan tauri::api::path::app_data_dir
     "cache.sqlite".to_string()
 }
 
@@ -40,6 +39,10 @@ async fn build_cache(zip_dir_path: String) -> Result<(), String> {
         "CREATE INDEX IF NOT EXISTS idx_file_name ON files (file_name)",
         [],
     ).map_err(|e| e.to_string())?;
+
+    // --- PERBAIKAN: Hapus data lama sebelum memasukkan yang baru ---
+    info!("Clearing old cache data...");
+    conn.execute("DELETE FROM files", []).map_err(|e| e.to_string())?;
 
     let paths = fs::read_dir(zip_dir_path).map_err(|e| e.to_string())?;
 
