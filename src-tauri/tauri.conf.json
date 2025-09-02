@@ -32,5 +32,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+      "opener": {
+      "allowedPaths": ["$DOWNLOAD/*"],
+      "requireLiteralLeadingDot": false
+    }
   }
 }

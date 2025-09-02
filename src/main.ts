@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { openPath } from '@tauri-apps/plugin-opener'; // Import open
+
 import { downloadDir } from '@tauri-apps/api/path'; // Import downloadDir
 
 interface FileEntry {
@@ -87,8 +87,8 @@ window.addEventListener("DOMContentLoaded", () => {
             fileName: entry.file_name,
             destination: downloadsPath
           });
-          showStatus(`'${entry.file_name}' extracted. Opening file...`);
-          await openPath(extractedFilePath); // Buka file yang diekstrak
+          showStatus(`'${entry.file_name}' extracted. Opening location in file explorer...`);
+          await invoke('show_item_in_folder_custom', { path: extractedFilePath }); // Buka lokasi file yang diekstrak di file explorer
         } catch (e) {
           showStatus(`Error extracting file: ${entry.file_name} ${e}`);
         } finally {

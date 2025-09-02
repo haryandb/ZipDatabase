@@ -146,14 +146,41 @@ fn extract_file(zip_path: String, file_name: String, destination: String) -> Res
     Ok(outpath.display().to_string())
 }
 
+#[tauri::command]
+fn show_item_in_folder_custom(path: String) -> Result<(), String> {
+    info!("Attempting to show item in folder: {}", path);
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(["/select,", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open explorer: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open Finder: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(Path::new(&path).parent().unwrap_or_else(|| Path::new(&path))) // xdg-open opens directory, not selects item
+            .spawn()
+            .map_err(|e| format!("Failed to open file manager: {}", e))?;
+    }
+    Ok(())
+}
+
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![build_cache, search_files, extract_file])
+        .plugin(tauri_plugin_shell::init())
+        .invoke_handler(tauri::generate_handler![build_cache, search_files, extract_file, show_item_in_folder_custom])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
