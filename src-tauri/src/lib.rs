@@ -1,9 +1,12 @@
 use rusqlite::{params, Connection, Result};
 use std::fs;
 use std::io;
+use std::path::PathBuf;
 use std::path::Path;
 use zip::ZipArchive;
 use log::{info, warn};
+use tauri::path::BaseDirectory;
+use tauri::Manager;
 
 // Struct untuk menampung data yang akan dikirim ke frontend
 #[derive(serde::Serialize, Debug)]
@@ -17,14 +20,22 @@ struct FileEntry {
 }
 
 // Fungsi untuk mendapatkan path database
-fn get_db_path() -> String {
-    "cache.sqlite".to_string()
+fn get_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app_handle
+        .path()
+        .resolve("cache", BaseDirectory::AppData)
+       .map_err(|_| "Failed to resolve app data directory")?;
+    
+    fs::create_dir_all(&app_data_dir)
+        .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+    
+    Ok(app_data_dir.join("cache.sqlite"))
 }
 
 #[tauri::command]
-async fn build_cache(zip_dir_path: String) -> Result<(), String> {
+async fn build_cache(app_handle: tauri::AppHandle, zip_dir_path: String) -> Result<(), String> {
     info!("Starting cache build from path: {}", zip_dir_path);
-    let db_path = get_db_path();
+    let db_path = get_db_path(&app_handle)?;
     let mut conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
     conn.execute(
@@ -99,9 +110,9 @@ struct SearchResult {
 }
 
 #[tauri::command]
-async fn search_files(query: String, page: u32, limit: u32) -> Result<SearchResult, String> {
+async fn search_files(app_handle: tauri::AppHandle, query: String, page: u32, limit: u32) -> Result<SearchResult, String> {
     info!("Searching for: {}", query);
-    let db_path = get_db_path();
+    let db_path = get_db_path(&app_handle)?;
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
     let search_query = format!("%{}%", query);
