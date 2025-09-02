@@ -1,4 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
+import { openPath } from '@tauri-apps/plugin-opener'; // Import open
+import { downloadDir } from '@tauri-apps/api/path'; // Import downloadDir
 
 interface FileEntry {
   id: number;
@@ -6,6 +8,7 @@ interface FileEntry {
   file_name: string;
   file_size: number;
   compressed_size: number;
+  zip_path: string; // Path lengkap ke file zip
 }
 
 // --- Fungsi Baru untuk memformat ukuran file ---
@@ -49,7 +52,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (results.length === 0) {
       const row = resultsTbody.insertRow();
       const cell = row.insertCell();
-      cell.colSpan = 3;
+      cell.colSpan = 4; // Diperbarui menjadi 4
       cell.textContent = 'No results found.';
       cell.style.textAlign = 'center';
       return;
@@ -60,10 +63,39 @@ window.addEventListener("DOMContentLoaded", () => {
       const cellFile = row.insertCell();
       const cellSize = row.insertCell();
       const cellArchive = row.insertCell();
+      const cellAction = row.insertCell(); // Sel untuk tombol
 
       cellFile.textContent = entry.file_name;
       cellSize.textContent = formatBytes(entry.file_size);
       cellArchive.textContent = entry.archive_name;
+
+      // Buat tombol Extract
+      const extractBtn = document.createElement('button');
+      extractBtn.textContent = 'Extract';
+      extractBtn.classList.add('pico-button', 'pico-button--secondary', 'pico-button--small');
+      cellAction.appendChild(extractBtn);
+
+      // Tambahkan event listener
+      extractBtn.addEventListener('click', async () => {
+        showStatus(`Extracting ${entry.file_name}...`);
+        extractBtn.setAttribute('aria-busy', 'true');
+        extractBtn.disabled = true;
+        try {
+          const downloadsPath = await downloadDir();
+          const extractedFilePath: string = await invoke('extract_file', { 
+            zipPath: entry.zip_path, 
+            fileName: entry.file_name,
+            destination: downloadsPath
+          });
+          showStatus(`'${entry.file_name}' extracted. Opening file...`);
+          await openPath(extractedFilePath); // Buka file yang diekstrak
+        } catch (e) {
+          showStatus(`Error extracting file: ${entry.file_name} ${e}`);
+        } finally {
+          extractBtn.setAttribute('aria-busy', 'false');
+          extractBtn.disabled = false;
+        }
+      });
     });
   }
 

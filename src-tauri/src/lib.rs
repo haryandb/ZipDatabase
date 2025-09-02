@@ -1,6 +1,7 @@
-
 use rusqlite::{params, Connection, Result};
 use std::fs;
+use std::io;
+use std::path::Path;
 use zip::ZipArchive;
 use log::{info, warn};
 
@@ -121,13 +122,38 @@ async fn search_files(query: String) -> Result<Vec<FileEntry>, String> {
     Ok(result)
 }
 
+#[tauri::command]
+fn extract_file(zip_path: String, file_name: String, destination: String) -> Result<String, String> {
+    info!("Extracting '{}' from '{}' to '{}'", file_name, zip_path, destination);
+
+    let zip_file = fs::File::open(&zip_path).map_err(|e| e.to_string())?;
+    let mut archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
+
+    let mut file_to_extract = archive.by_name(&file_name).map_err(|e| e.to_string())?;
+
+    let outpath = Path::new(&destination).join(file_to_extract.name());
+
+    if let Some(p) = outpath.parent() {
+        if !p.exists() {
+            fs::create_dir_all(p).map_err(|e| e.to_string())?;
+        }
+    }
+
+    let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
+    io::copy(&mut file_to_extract, &mut outfile).map_err(|e| e.to_string())?;
+    
+    info!("Successfully extracted file to: {}", outpath.display());
+    Ok(outpath.display().to_string())
+}
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![build_cache, search_files])
+        .invoke_handler(tauri::generate_handler![build_cache, search_files, extract_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
