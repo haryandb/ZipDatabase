@@ -8,6 +8,16 @@ interface FileEntry {
   compressed_size: number;
 }
 
+// --- Fungsi Baru untuk memformat ukuran file ---
+function formatBytes(bytes: number, decimals = 2): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
 window.addEventListener("DOMContentLoaded", () => {
   const buildCacheBtn = document.querySelector<HTMLButtonElement>("#build-cache-btn");
   const searchBtn = document.querySelector<HTMLButtonElement>("#search-btn");
@@ -15,7 +25,10 @@ window.addEventListener("DOMContentLoaded", () => {
   const statusContainer = document.querySelector<HTMLElement>("#status-container");
   const resultsContainer = document.querySelector<HTMLElement>("#results-container");
   const statusEl = document.querySelector("#status-messages");
-  const resultsEl = document.querySelector("#search-results");
+  
+  // --- Referensi baru untuk tabel ---
+  const resultsHeader = document.querySelector("#results-header");
+  const resultsTbody = document.querySelector<HTMLTableSectionElement>("#results-tbody");
 
   function showStatus(message: string) {
     if (statusContainer && statusEl) {
@@ -24,17 +37,40 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function showResults(data: object) {
-    if (resultsContainer && resultsEl) {
-      resultsContainer.style.display = 'block';
-      resultsEl.textContent = JSON.stringify(data, null, 2);
+  // --- Fungsi yang diperbarui untuk menampilkan hasil di tabel ---
+  function renderResults(results: FileEntry[]) {
+    if (!resultsContainer || !resultsTbody || !resultsHeader) return;
+
+    resultsContainer.style.display = 'block';
+    resultsHeader.textContent = `Found ${results.length} results.`;
+    // Kosongkan hasil sebelumnya
+    resultsTbody.innerHTML = '';
+
+    if (results.length === 0) {
+      const row = resultsTbody.insertRow();
+      const cell = row.insertCell();
+      cell.colSpan = 3;
+      cell.textContent = 'No results found.';
+      cell.style.textAlign = 'center';
+      return;
     }
+
+    results.forEach(entry => {
+      const row = resultsTbody.insertRow();
+      const cellFile = row.insertCell();
+      const cellSize = row.insertCell();
+      const cellArchive = row.insertCell();
+
+      cellFile.textContent = entry.file_name;
+      cellSize.textContent = formatBytes(entry.file_size);
+      cellArchive.textContent = entry.archive_name;
+    });
   }
 
   buildCacheBtn?.addEventListener("click", async () => {
     const dirPathInput = document.querySelector<HTMLInputElement>("#zip-dir-path");
     if (dirPathInput && buildCacheBtn) {
-      showStatus("Building cache... This might take several minutes depending on the size of your files. See terminal for progress.");
+      showStatus("Building cache... This might take several minutes. See terminal for progress.");
       if (resultsContainer) resultsContainer.style.display = 'none';
       
       buildCacheBtn.setAttribute('aria-busy', 'true');
@@ -63,8 +99,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
       try {
         const results: FileEntry[] = await invoke('search_files', { query: searchInput.value });
-        showStatus(`Found ${results.length} results.`);
-        showResults(results);
+        showStatus("Search complete."); // Status sekarang hanya konfirmasi
+        renderResults(results); // Panggil fungsi render tabel
       } catch (e) {
         showStatus(`Error: ${e}`);
       } finally {

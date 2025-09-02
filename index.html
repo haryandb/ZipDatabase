@@ -51,8 +51,23 @@
       </article>
       
       <article id="results-container" style="display: none;">
-        <header><strong>Results</strong></header>
-        <pre id="search-results"></pre>
+        <header>
+          <strong id="results-header">Results</strong>
+        </header>
+        <figure>
+          <table role="grid">
+            <thead>
+              <tr>
+                <th scope="col">File Name</th>
+                <th scope="col">Size</th>
+                <th scope="col">Found in Archive</th>
+              </tr>
+            </thead>
+            <tbody id="results-tbody">
+              <!-- Hasil pencarian akan dimasukkan di sini oleh JavaScript -->
+            </tbody>
+          </table>
+        </figure>
       </article>
 
     </main>
