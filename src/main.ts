@@ -1,5 +1,4 @@
 import { invoke } from '@tauri-apps/api/core';
-
 import { downloadDir } from '@tauri-apps/api/path'; // Import downloadDir
 
 interface FileEntry {
@@ -9,6 +8,11 @@ interface FileEntry {
   file_size: number;
   compressed_size: number;
   zip_path: string; // Path lengkap ke file zip
+}
+
+interface SearchResult {
+  entries: FileEntry[];
+  total_count: number;
 }
 
 // --- Fungsi Baru untuk memformat ukuran file ---
@@ -21,9 +25,16 @@ function formatBytes(bytes: number, decimals = 2): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
+// Pagination state
+const ITEMS_PER_PAGE = 20;
+let currentPage = 1;
+let totalResults = 0;
+let totalPages = 0;
+
 window.addEventListener("DOMContentLoaded", () => {
   const buildCacheBtn = document.querySelector<HTMLButtonElement>("#build-cache-btn");
   const searchBtn = document.querySelector<HTMLButtonElement>("#search-btn");
+  const searchInput = document.querySelector<HTMLInputElement>("#search-query");
   
   const statusContainer = document.querySelector<HTMLElement>("#status-container");
   const resultsContainer = document.querySelector<HTMLElement>("#results-container");
@@ -33,6 +44,11 @@ window.addEventListener("DOMContentLoaded", () => {
   const resultsHeader = document.querySelector("#results-header");
   const resultsTbody = document.querySelector<HTMLTableSectionElement>("#results-tbody");
 
+  // Pagination controls
+  const prevPageBtn = document.querySelector<HTMLButtonElement>("#prev-page-btn");
+  const nextPageBtn = document.querySelector<HTMLButtonElement>("#next-page-btn");
+  const pageInfo = document.querySelector<HTMLSpanElement>("#page-info");
+
   function showStatus(message: string) {
     if (statusContainer && statusEl) {
       statusContainer.style.display = 'block';
@@ -40,25 +56,31 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function updatePaginationControls() {
+    if (prevPageBtn) prevPageBtn.disabled = currentPage === 1;
+    if (nextPageBtn) nextPageBtn.disabled = currentPage === totalPages || totalPages === 0;
+    if (pageInfo) pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+  }
+
   // --- Fungsi yang diperbarui untuk menampilkan hasil di tabel ---
-  function renderResults(results: FileEntry[]) {
+  function renderResults(entries: FileEntry[]) {
     if (!resultsContainer || !resultsTbody || !resultsHeader) return;
 
     resultsContainer.style.display = 'block';
-    resultsHeader.textContent = `Found ${results.length} results.`;
+    resultsHeader.textContent = `Found ${totalResults} results. Page ${currentPage} of ${totalPages}.`;
     // Kosongkan hasil sebelumnya
     resultsTbody.innerHTML = '';
 
-    if (results.length === 0) {
+    if (entries.length === 0 && totalResults === 0) {
       const row = resultsTbody.insertRow();
       const cell = row.insertCell();
-      cell.colSpan = 4; // Diperbarui menjadi 4
+      cell.colSpan = 4;
       cell.textContent = 'No results found.';
       cell.style.textAlign = 'center';
       return;
     }
 
-    results.forEach(entry => {
+    entries.forEach(entry => {
       const row = resultsTbody.insertRow();
       const cellFile = row.insertCell();
       const cellSize = row.insertCell();
@@ -99,6 +121,42 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  async function performSearch() {
+    if (!searchInput || !searchBtn) return;
+
+    showStatus("Searching...");
+    if (resultsContainer) resultsContainer.style.display = 'none';
+
+    searchBtn.setAttribute('aria-busy', 'true');
+    searchBtn.disabled = true;
+
+    try {
+      const searchResult: SearchResult = await invoke('search_files', { 
+        query: searchInput.value,
+        page: currentPage,
+        limit: ITEMS_PER_PAGE
+      });
+      
+      totalResults = searchResult.total_count;
+      totalPages = Math.ceil(totalResults / ITEMS_PER_PAGE);
+      if (totalPages === 0 && totalResults > 0) totalPages = 1; // Handle case where totalResults < ITEMS_PER_PAGE but > 0
+
+      showStatus("Search complete.");
+      renderResults(searchResult.entries);
+      updatePaginationControls();
+
+    } catch (e) {
+      showStatus(`Error: ${e}`);
+      totalResults = 0;
+      totalPages = 0;
+      renderResults([]); // Clear results on error
+      updatePaginationControls();
+    } finally {
+      searchBtn.setAttribute('aria-busy', 'false');
+      searchBtn.disabled = false;
+    }
+  }
+
   buildCacheBtn?.addEventListener("click", async () => {
     const dirPathInput = document.querySelector<HTMLInputElement>("#zip-dir-path");
     if (dirPathInput && buildCacheBtn) {
@@ -121,24 +179,21 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   searchBtn?.addEventListener("click", async () => {
-    const searchInput = document.querySelector<HTMLInputElement>("#search-query");
-    if (searchInput && searchBtn) {
-      showStatus("Searching...");
-      if (resultsContainer) resultsContainer.style.display = 'none';
+    currentPage = 1; // Reset to first page on new search
+    await performSearch();
+  });
 
-      searchBtn.setAttribute('aria-busy', 'true');
-      searchBtn.disabled = true;
+  prevPageBtn?.addEventListener("click", async () => {
+    if (currentPage > 1) {
+      currentPage--;
+      await performSearch();
+    }
+  });
 
-      try {
-        const results: FileEntry[] = await invoke('search_files', { query: searchInput.value });
-        showStatus("Search complete."); // Status sekarang hanya konfirmasi
-        renderResults(results); // Panggil fungsi render tabel
-      } catch (e) {
-        showStatus(`Error: ${e}`);
-      } finally {
-        searchBtn.setAttribute('aria-busy', 'false');
-        searchBtn.disabled = false;
-      }
+  nextPageBtn?.addEventListener("click", async () => {
+    if (currentPage < totalPages) {
+      currentPage++;
+      await performSearch();
     }
   });
 });

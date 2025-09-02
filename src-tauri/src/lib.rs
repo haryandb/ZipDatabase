@@ -92,17 +92,33 @@ async fn build_cache(zip_dir_path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize, Debug)]
+struct SearchResult {
+    entries: Vec<FileEntry>,
+    total_count: u64,
+}
+
 #[tauri::command]
-async fn search_files(query: String) -> Result<Vec<FileEntry>, String> {
+async fn search_files(query: String, page: u32, limit: u32) -> Result<SearchResult, String> {
     info!("Searching for: {}", query);
     let db_path = get_db_path();
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
-    let mut stmt = conn.prepare("SELECT id, archive_name, file_name, file_size, compressed_size, zip_path FROM files WHERE file_name LIKE ?1")
-        .map_err(|e| e.to_string())?;
-    
     let search_query = format!("%{}%", query);
-    let entries = stmt.query_map(params![search_query], |row| {
+    let offset = (page - 1) * limit;
+
+    // Get total count
+    let total_count: u64 = conn.query_row(
+        "SELECT COUNT(*) FROM files WHERE file_name LIKE ?1",
+        params![search_query],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, archive_name, file_name, file_size, compressed_size, zip_path FROM files WHERE file_name LIKE ?1 LIMIT ?2 OFFSET ?3"
+    ).map_err(|e| e.to_string())?;
+    
+    let entries = stmt.query_map(params![search_query, limit, offset], |row| {
         Ok(FileEntry {
             id: row.get(0)?,
             archive_name: row.get(1)?,
@@ -118,8 +134,8 @@ async fn search_files(query: String) -> Result<Vec<FileEntry>, String> {
         result.push(entry.map_err(|e| e.to_string())?);
     }
     
-    info!("Found {} results.", result.len());
-    Ok(result)
+    info!("Found {} results (total: {}).", result.len(), total_count);
+    Ok(SearchResult { entries: result, total_count })
 }
 
 #[tauri::command]
