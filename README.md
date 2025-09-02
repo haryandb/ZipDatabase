@@ -11,6 +11,13 @@ ZipCache is a desktop application built with Tauri (Rust backend, TypeScript/HTM
 -   **Reveal in File Explorer:** After extraction, automatically open the extracted file's location in your operating system's file explorer (Finder on macOS, Explorer on Windows, etc.).
 -   **Fullscreen Mode:** Launches in fullscreen for an immersive experience.
 
+## Demo
+
+<video controls width="100%">
+  <source src="demo.mov" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
 ## Technologies Used:
 
 -   **Tauri:** For building cross-platform desktop applications with web technologies.
