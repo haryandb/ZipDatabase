@@ -1,8 +1,7 @@
-
 use rusqlite::{params, Connection, Result};
 use std::fs;
 use zip::ZipArchive;
-use log::info;
+use log::{info, warn};
 
 // Struct untuk menampung data yang akan dikirim ke frontend
 #[derive(serde::Serialize, Debug)]
@@ -25,7 +24,6 @@ fn get_db_path() -> String {
 async fn build_cache(zip_dir_path: String) -> Result<(), String> {
     info!("Starting cache build from path: {}", zip_dir_path);
     let db_path = get_db_path();
-    // `conn` harus mutable untuk bisa membuat transaction
     let mut conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
     conn.execute(
@@ -38,12 +36,10 @@ async fn build_cache(zip_dir_path: String) -> Result<(), String> {
         )",
         [],
     ).map_err(|e| e.to_string())?;
-     // Buat index untuk percepat pencarian
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_file_name ON files (file_name)",
         [],
     ).map_err(|e| e.to_string())?;
-
 
     let paths = fs::read_dir(zip_dir_path).map_err(|e| e.to_string())?;
 
@@ -53,18 +49,27 @@ async fn build_cache(zip_dir_path: String) -> Result<(), String> {
             let archive_name = path.file_name().unwrap().to_str().unwrap().to_string();
             info!("Processing archive: {}", archive_name);
 
-            let file = fs::File::open(&path).map_err(|e| e.to_string())?;
-            let mut archive = ZipArchive::new(file).map_err(|e| e.to_string())?;
+            let file = match fs::File::open(&path) {
+                Ok(f) => f,
+                Err(e) => {
+                    warn!("Could not open file {}: {}. Skipping.", path.display(), e);
+                    continue;
+                }
+            };
+
+            let mut archive = match ZipArchive::new(file) {
+                Ok(a) => a,
+                Err(e) => {
+                    warn!("Failed to read ZIP archive '{}': {}. It might be corrupted or not a valid ZIP. Skipping.", &archive_name, e);
+                    continue;
+                }
+            };
             
-            // Gunakan transaction untuk performa insert yang jauh lebih cepat
             let tx = conn.transaction().map_err(|e| e.to_string())?;
-            
             for i in 0..archive.len() {
                 let file_in_zip = archive.by_index(i).map_err(|e| e.to_string())?;
-                let file_name = file_in_zip.name().to_string();
-
-                // Hanya proses file, abaikan direktori
                 if !file_in_zip.is_dir() {
+                    let file_name = file_in_zip.name().to_string();
                     tx.execute(
                         "INSERT INTO files (archive_name, file_name, file_size, compressed_size) VALUES (?1, ?2, ?3, ?4)",
                         params![&archive_name, &file_name, file_in_zip.size(), file_in_zip.compressed_size()],
@@ -109,10 +114,8 @@ async fn search_files(query: String) -> Result<Vec<FileEntry>, String> {
     Ok(result)
 }
 
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Inisialisasi logger
     env_logger::init();
 
     tauri::Builder::default()
