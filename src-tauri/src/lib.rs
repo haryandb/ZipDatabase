@@ -12,6 +12,7 @@ struct FileEntry {
     file_name: String,
     file_size: u64,
     compressed_size: u64,
+    zip_path: String, // Tambahkan path zip
 }
 
 // Fungsi untuk mendapatkan path database
@@ -31,7 +32,8 @@ async fn build_cache(zip_dir_path: String) -> Result<(), String> {
             archive_name    TEXT NOT NULL,
             file_name       TEXT NOT NULL,
             file_size       INTEGER,
-            compressed_size INTEGER
+            compressed_size INTEGER,
+            zip_path        TEXT NOT NULL
         )",
         [],
     ).map_err(|e| e.to_string())?;
@@ -50,6 +52,7 @@ async fn build_cache(zip_dir_path: String) -> Result<(), String> {
         let path = path.map_err(|e| e.to_string())?.path();
         if path.is_file() && path.extension().and_then(std::ffi::OsStr::to_str) == Some("zip") {
             let archive_name = path.file_name().unwrap().to_str().unwrap().to_string();
+            let zip_path_str = path.to_str().unwrap_or("").to_string(); // Dapatkan full path
             info!("Processing archive: {}", archive_name);
 
             let file = match fs::File::open(&path) {
@@ -74,8 +77,8 @@ async fn build_cache(zip_dir_path: String) -> Result<(), String> {
                 if !file_in_zip.is_dir() {
                     let file_name = file_in_zip.name().to_string();
                     tx.execute(
-                        "INSERT INTO files (archive_name, file_name, file_size, compressed_size) VALUES (?1, ?2, ?3, ?4)",
-                        params![&archive_name, &file_name, file_in_zip.size(), file_in_zip.compressed_size()],
+                        "INSERT INTO files (archive_name, file_name, file_size, compressed_size, zip_path) VALUES (?1, ?2, ?3, ?4, ?5)",
+                        params![&archive_name, &file_name, file_in_zip.size(), file_in_zip.compressed_size(), &zip_path_str],
                     ).map_err(|e| e.to_string())?;
                 }
             }
@@ -94,7 +97,7 @@ async fn search_files(query: String) -> Result<Vec<FileEntry>, String> {
     let db_path = get_db_path();
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
-    let mut stmt = conn.prepare("SELECT id, archive_name, file_name, file_size, compressed_size FROM files WHERE file_name LIKE ?1")
+    let mut stmt = conn.prepare("SELECT id, archive_name, file_name, file_size, compressed_size, zip_path FROM files WHERE file_name LIKE ?1")
         .map_err(|e| e.to_string())?;
     
     let search_query = format!("%{}%", query);
@@ -105,6 +108,7 @@ async fn search_files(query: String) -> Result<Vec<FileEntry>, String> {
             file_name: row.get(2)?,
             file_size: row.get(3)?,
             compressed_size: row.get(4)?,
+            zip_path: row.get(5)?,
         })
     }).map_err(|e| e.to_string())?;
 
