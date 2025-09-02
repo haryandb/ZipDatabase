@@ -26,7 +26,7 @@ function formatBytes(bytes: number, decimals = 2): string {
 }
 
 // Pagination state
-const ITEMS_PER_PAGE = 20;
+let ITEMS_PER_PAGE = 20; // Changed to let
 let currentPage = 1;
 let totalResults = 0;
 let totalPages = 0;
@@ -48,6 +48,9 @@ window.addEventListener("DOMContentLoaded", () => {
   const prevPageBtn = document.querySelector<HTMLButtonElement>("#prev-page-btn");
   const nextPageBtn = document.querySelector<HTMLButtonElement>("#next-page-btn");
   const pageInfo = document.querySelector<HTMLSpanElement>("#page-info");
+
+  // Items per page control
+  const itemsPerPageSelect = document.querySelector<HTMLSelectElement>("#items-per-page"); // New reference
 
   function showStatus(message: string) {
     if (statusContainer && statusEl) {
@@ -195,5 +198,12 @@ window.addEventListener("DOMContentLoaded", () => {
       currentPage++;
       await performSearch();
     }
+  });
+
+  // New event listener for items per page select
+  itemsPerPageSelect?.addEventListener("change", async () => {
+    ITEMS_PER_PAGE = parseInt(itemsPerPageSelect.value);
+    currentPage = 1; // Reset to first page when items per page changes
+    await performSearch();
   });
 });
