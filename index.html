@@ -1,43 +1,60 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <link rel="stylesheet" href="/src/styles.css" />
+    <meta charset="UTF-g" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <link rel="stylesheet" href="src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri App</title>
+    <title>ZipCache</title>
     <script type="module" src="/src/main.ts" defer></script>
   </head>
 
   <body>
     <main class="container">
-      <h1>Welcome to Tauri</h1>
+      <header>
+        <h1>ZipCache</h1>
+        <p>Cache and search contents of large ZIP archives.</p>
+      </header>
 
-      <div class="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/src/assets/vite.svg" class="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img
-            src="/src/assets/tauri.svg"
-            class="logo tauri"
-            alt="Tauri logo"
+      <article>
+        <header>
+          <strong>1. Build Cache</strong>
+        </header>
+        <p>Enter the absolute path to the directory containing your .zip files.</p>
+        <div class="grid">
+          <input
+            type="text"
+            id="zip-dir-path"
+            placeholder="e.g., /Users/yourname/Documents/Archives"
           />
-        </a>
-        <a href="https://www.typescriptlang.org/docs" target="_blank">
-          <img
-            src="/src/assets/typescript.svg"
-            class="logo typescript"
-            alt="typescript logo"
-          />
-        </a>
-      </div>
-      <p>Click on the Tauri logo to learn more about the framework</p>
+          <button id="build-cache-btn">Build Cache</button>
+        </div>
+      </article>
 
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
-      <p id="greet-msg"></p>
+      <article>
+        <header>
+          <strong>2. Search Files</strong>
+        </header>
+        <div class="grid">
+          <input 
+            type="search" 
+            id="search-query" 
+            placeholder="e.g., report.docx" 
+          />
+          <button id="search-btn">Search</button>
+        </div>
+      </article>
+
+      <article id="status-container" style="display: none;">
+        <header><strong>Status</strong></header>
+        <p id="status-messages"></p>
+      </article>
+      
+      <article id="results-container" style="display: none;">
+        <header><strong>Results</strong></header>
+        <pre id="search-results"></pre>
+      </article>
+
     </main>
   </body>
 </html>
