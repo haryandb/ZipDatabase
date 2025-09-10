@@ -120,8 +120,16 @@ async fn search_files(
     page: u32,
     limit: u32,
     exclude: Option<Vec<String>>,
+    search_depth: Option<u32>,
+    unique: bool,
 ) -> Result<SearchResult, String> {
-    info!("Searching for: '{}', excluding: {:?}", query, exclude);
+    info!(
+        "Searching for: '{}', excluding: {:?}, depth: {:?}, unique: {}",
+        query,
+        exclude,
+        search_depth,
+        unique
+    );
     let db_path = get_db_path(&app_handle)?;
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
@@ -140,10 +148,16 @@ async fn search_files(
         }
     }
 
+    if let Some(depth) = search_depth {
+        where_clauses.push("(LENGTH(file_name) - LENGTH(REPLACE(file_name, '/', ''))) <= ?".to_string());
+        params.push(Box::new(depth));
+    }
+
     let where_sql = where_clauses.join(" AND ");
+    let group_by_sql = if unique { "GROUP BY file_name" } else { "" };
 
     // Get total count
-    let count_sql = format!("SELECT COUNT(*) FROM files WHERE {}", where_sql);
+    let count_sql = format!("SELECT COUNT(*) FROM (SELECT 1 FROM files WHERE {} {})", where_sql, group_by_sql);
     let total_count: u64 = conn
         .query_row(
             &count_sql,
@@ -153,9 +167,15 @@ async fn search_files(
         .map_err(|e| e.to_string())?;
 
     // Get entries
+    let select_sql = if unique {
+        "MIN(id) as id, archive_name, file_name, file_size, compressed_size, zip_path"
+    } else {
+        "id, archive_name, file_name, file_size, compressed_size, zip_path"
+    };
+
     let query_sql = format!(
-        "SELECT id, archive_name, file_name, file_size, compressed_size, zip_path FROM files WHERE {} ORDER BY file_name ASC LIMIT ? OFFSET ?",
-        where_sql
+        "SELECT {} FROM files WHERE {} {} ORDER BY file_name ASC LIMIT ? OFFSET ?",
+        select_sql, where_sql, group_by_sql
     );
     let mut stmt = conn.prepare(&query_sql).map_err(|e| e.to_string())?;
 

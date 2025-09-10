@@ -36,6 +36,8 @@ window.addEventListener("DOMContentLoaded", () => {
   const searchBtn = document.querySelector<HTMLButtonElement>("#search-btn");
   const searchInput = document.querySelector<HTMLInputElement>("#search-query");
   const excludeInput = document.querySelector<HTMLInputElement>("#exclude-patterns");
+  const searchDepthInput = document.querySelector<HTMLInputElement>("#search-depth");
+  const uniqueResultsCheckbox = document.querySelector<HTMLInputElement>("#unique-results-checkbox");
 
   const statusContainer = document.querySelector<HTMLElement>("#status-container");
   const resultsContainer = document.querySelector<HTMLElement>("#results-container");
@@ -181,11 +183,15 @@ window.addEventListener("DOMContentLoaded", () => {
 
     try {
       const excludePatterns = excludeInput?.value.split(',').map(p => p.trim()).filter(p => p.length > 0) || [];
+      const searchDepth = searchDepthInput?.value ? parseInt(searchDepthInput.value, 10) : null;
+      const unique = uniqueResultsCheckbox?.checked || false;
       const searchResult: SearchResult = await invoke('search_files', {
         query: searchInput.value,
         page: currentPage,
         limit: ITEMS_PER_PAGE,
-        exclude: excludePatterns
+        exclude: excludePatterns,
+        searchDepth: isNaN(searchDepth) ? null : searchDepth,
+        unique: unique
       });
 
       totalResults = searchResult.total_count;
@@ -313,11 +319,15 @@ window.addEventListener("DOMContentLoaded", () => {
     try {
       // Fetch all results from the backend
       const excludePatterns = excludeInput?.value.split(',').map(p => p.trim()).filter(p => p.length > 0) || [];
+      const searchDepth = searchDepthInput?.value ? parseInt(searchDepthInput.value, 10) : null;
+      const unique = uniqueResultsCheckbox?.checked || false;
       const searchResult: SearchResult = await invoke('search_files', {
         query: searchInput.value,
         page: 1,
         limit: 1000000000, // A large number to get all results
-        exclude: excludePatterns
+        exclude: excludePatterns,
+        searchDepth: isNaN(searchDepth) ? null : searchDepth,
+        unique: unique
       });
 
       const downloadsPath = await downloadDir();
