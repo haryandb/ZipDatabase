@@ -35,6 +35,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const buildCacheBtn = document.querySelector<HTMLButtonElement>("#build-cache-btn");
   const searchBtn = document.querySelector<HTMLButtonElement>("#search-btn");
   const searchInput = document.querySelector<HTMLInputElement>("#search-query");
+  const excludeInput = document.querySelector<HTMLInputElement>("#exclude-patterns");
 
   const statusContainer = document.querySelector<HTMLElement>("#status-container");
   const resultsContainer = document.querySelector<HTMLElement>("#results-container");
@@ -179,10 +180,12 @@ window.addEventListener("DOMContentLoaded", () => {
     updateBulkExtractButton();
 
     try {
+      const excludePatterns = excludeInput?.value.split(',').map(p => p.trim()).filter(p => p.length > 0) || [];
       const searchResult: SearchResult = await invoke('search_files', {
         query: searchInput.value,
         page: currentPage,
-        limit: ITEMS_PER_PAGE
+        limit: ITEMS_PER_PAGE,
+        exclude: excludePatterns
       });
 
       totalResults = searchResult.total_count;
@@ -309,10 +312,12 @@ window.addEventListener("DOMContentLoaded", () => {
 
     try {
       // Fetch all results from the backend
+      const excludePatterns = excludeInput?.value.split(',').map(p => p.trim()).filter(p => p.length > 0) || [];
       const searchResult: SearchResult = await invoke('search_files', {
         query: searchInput.value,
         page: 1,
-        limit: 1000000000 // A large number to get all results
+        limit: 1000000000, // A large number to get all results
+        exclude: excludePatterns
       });
 
       const downloadsPath = await downloadDir();

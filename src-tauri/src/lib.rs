@@ -119,38 +119,64 @@ async fn search_files(
     query: String,
     page: u32,
     limit: u32,
+    exclude: Option<Vec<String>>,
 ) -> Result<SearchResult, String> {
-    info!("Searching for: {}", query);
+    info!("Searching for: '{}', excluding: {:?}", query, exclude);
     let db_path = get_db_path(&app_handle)?;
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
     let search_query = format!("%{}%", query);
     let offset = (page - 1) * limit;
 
+    let mut where_clauses: Vec<String> = vec!["file_name LIKE ?".to_string()];
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(search_query)];
+
+    if let Some(exclude_patterns) = exclude {
+        for pattern in exclude_patterns.iter() {
+            if !pattern.trim().is_empty() {
+                where_clauses.push("file_name NOT LIKE ?".to_string());
+                params.push(Box::new(format!("%{}%", pattern)));
+            }
+        }
+    }
+
+    let where_sql = where_clauses.join(" AND ");
+
     // Get total count
+    let count_sql = format!("SELECT COUNT(*) FROM files WHERE {}", where_sql);
     let total_count: u64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM files WHERE file_name LIKE ?1",
-            params![search_query],
+            &count_sql,
+            rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())),
             |row| row.get(0),
         )
         .map_err(|e| e.to_string())?;
 
-    let mut stmt = conn.prepare(
-        "SELECT id, archive_name, file_name, file_size, compressed_size, zip_path FROM files WHERE file_name LIKE ?1 ORDER BY file_name ASC LIMIT ?2 OFFSET ?3 "
-    ).map_err(|e| e.to_string())?;
+    // Get entries
+    let query_sql = format!(
+        "SELECT id, archive_name, file_name, file_size, compressed_size, zip_path FROM files WHERE {} ORDER BY file_name ASC LIMIT ? OFFSET ?",
+        where_sql
+    );
+    let mut stmt = conn.prepare(&query_sql).map_err(|e| e.to_string())?;
+
+    let mut query_params: Vec<Box<dyn rusqlite::ToSql>> = params;
+    query_params.push(Box::new(limit));
+    query_params.push(Box::new(offset));
 
     let entries = stmt
-        .query_map(params![search_query, limit, offset], |row| {
-            Ok(FileEntry {
-                id: row.get(0)?,
-                archive_name: row.get(1)?,
-                file_name: row.get(2)?,
-                file_size: row.get(3)?,
-                compressed_size: row.get(4)?,
-                zip_path: row.get(5)?,
-            })
-        })
+        .query_map(
+            rusqlite::params_from_iter(query_params.iter().map(|p| p.as_ref())),
+            |row| {
+                Ok(FileEntry {
+                    id: row.get(0)?,
+                    archive_name: row.get(1)?,
+                    file_name: row.get(2)?,
+                    file_size: row.get(3)?,
+                    compressed_size: row.get(4)?,
+                    zip_path: row.get(5)?,
+                })
+            },
+        )
         .map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
