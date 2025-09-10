@@ -35,11 +35,11 @@ window.addEventListener("DOMContentLoaded", () => {
   const buildCacheBtn = document.querySelector<HTMLButtonElement>("#build-cache-btn");
   const searchBtn = document.querySelector<HTMLButtonElement>("#search-btn");
   const searchInput = document.querySelector<HTMLInputElement>("#search-query");
-  
+
   const statusContainer = document.querySelector<HTMLElement>("#status-container");
   const resultsContainer = document.querySelector<HTMLElement>("#results-container");
   const statusEl = document.querySelector("#status-messages");
-  
+
   // --- Referensi baru untuk tabel ---
   const resultsHeader = document.querySelector("#results-header");
   const resultsTbody = document.querySelector<HTMLTableSectionElement>("#results-tbody");
@@ -51,6 +51,12 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // Items per page control
   const itemsPerPageSelect = document.querySelector<HTMLSelectElement>("#items-per-page"); // New reference
+
+  // Bulk extract controls
+  const selectAllCheckbox = document.querySelector<HTMLInputElement>("#select-all-checkbox");
+  const bulkExtractBtn = document.querySelector<HTMLButtonElement>("#bulk-extract-btn");
+
+  const selectedFiles = new Set<number>();
 
   function showStatus(message: string) {
     if (statusContainer && statusEl) {
@@ -65,6 +71,13 @@ window.addEventListener("DOMContentLoaded", () => {
     if (pageInfo) pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
   }
 
+  function updateBulkExtractButton() {
+    if (bulkExtractBtn) {
+      bulkExtractBtn.disabled = selectedFiles.size === 0;
+      bulkExtractBtn.textContent = `Bulk Extract Selected (${selectedFiles.size})`;
+    }
+  }
+
   // --- Fungsi yang diperbarui untuk menampilkan hasil di tabel ---
   function renderResults(entries: FileEntry[]) {
     if (!resultsContainer || !resultsTbody || !resultsHeader) return;
@@ -77,7 +90,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (entries.length === 0 && totalResults === 0) {
       const row = resultsTbody.insertRow();
       const cell = row.insertCell();
-      cell.colSpan = 4;
+      cell.colSpan = 5;
       cell.textContent = 'No results found.';
       cell.style.textAlign = 'center';
       return;
@@ -85,10 +98,26 @@ window.addEventListener("DOMContentLoaded", () => {
 
     entries.forEach(entry => {
       const row = resultsTbody.insertRow();
+      const cellCheckbox = row.insertCell();
       const cellFile = row.insertCell();
       const cellSize = row.insertCell();
       const cellArchive = row.insertCell();
       const cellAction = row.insertCell(); // Sel untuk tombol
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.dataset.id = entry.id.toString();
+      checkbox.checked = selectedFiles.has(entry.id);
+      cellCheckbox.appendChild(checkbox);
+
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          selectedFiles.add(entry.id);
+        } else {
+          selectedFiles.delete(entry.id);
+        }
+        updateBulkExtractButton();
+      });
 
       cellFile.textContent = entry.file_name;
       cellSize.textContent = formatBytes(entry.file_size);
@@ -107,8 +136,8 @@ window.addEventListener("DOMContentLoaded", () => {
         extractBtn.disabled = true;
         try {
           const downloadsPath = await downloadDir();
-          const extractedFilePath: string = await invoke('extract_file', { 
-            zipPath: entry.zip_path, 
+          const extractedFilePath: string = await invoke('extract_file', {
+            zipPath: entry.zip_path,
             fileName: entry.file_name,
             destination: downloadsPath
           });
@@ -122,6 +151,8 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       });
     });
+
+    updateBulkExtractButton();
   }
 
   async function performSearch() {
@@ -133,13 +164,18 @@ window.addEventListener("DOMContentLoaded", () => {
     searchBtn.setAttribute('aria-busy', 'true');
     searchBtn.disabled = true;
 
+    // Reset selection
+    selectedFiles.clear();
+    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+    updateBulkExtractButton();
+
     try {
-      const searchResult: SearchResult = await invoke('search_files', { 
+      const searchResult: SearchResult = await invoke('search_files', {
         query: searchInput.value,
         page: currentPage,
         limit: ITEMS_PER_PAGE
       });
-      
+
       totalResults = searchResult.total_count;
       totalPages = Math.ceil(totalResults / ITEMS_PER_PAGE);
       if (totalPages === 0 && totalResults > 0) totalPages = 1; // Handle case where totalResults < ITEMS_PER_PAGE but > 0
@@ -165,7 +201,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (dirPathInput && buildCacheBtn) {
       showStatus("Building cache... This might take several minutes. See terminal for progress.");
       if (resultsContainer) resultsContainer.style.display = 'none';
-      
+
       buildCacheBtn.setAttribute('aria-busy', 'true');
       buildCacheBtn.disabled = true;
 
@@ -205,5 +241,47 @@ window.addEventListener("DOMContentLoaded", () => {
     ITEMS_PER_PAGE = parseInt(itemsPerPageSelect.value);
     currentPage = 1; // Reset to first page when items per page changes
     await performSearch();
+  });
+
+  selectAllCheckbox?.addEventListener('change', () => {
+    const checkboxes = resultsTbody?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+    if (!checkboxes) return;
+
+    checkboxes.forEach(checkbox => {
+      const id = parseInt(checkbox.dataset.id || '0');
+      if (selectAllCheckbox.checked) {
+        selectedFiles.add(id);
+        checkbox.checked = true;
+      } else {
+        selectedFiles.delete(id);
+        checkbox.checked = false;
+      }
+    });
+
+    updateBulkExtractButton();
+  });
+
+  bulkExtractBtn?.addEventListener('click', async () => {
+    if (selectedFiles.size === 0) return;
+
+    showStatus(`Extracting ${selectedFiles.size} files...`);
+    bulkExtractBtn.setAttribute('aria-busy', 'true');
+    bulkExtractBtn.disabled = true;
+
+    try {
+      const downloadsPath = await downloadDir();
+      const destination = `${downloadsPath}/ZipCache_Extraction`;
+      const result: string = await invoke('extract_files', {
+        ids: Array.from(selectedFiles),
+        destination: destination
+      });
+      showStatus(`${selectedFiles.size} files extracted to ${result}. Opening folder...`);
+      await invoke('show_item_in_folder_custom', { path: result });
+    } catch (e) {
+      showStatus(`Error during bulk extraction: ${e}`);
+    } finally {
+      bulkExtractBtn.setAttribute('aria-busy', 'false');
+      bulkExtractBtn.disabled = false;
+    }
   });
 });

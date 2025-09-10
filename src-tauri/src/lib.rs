@@ -1,12 +1,12 @@
+use log::{info, warn};
 use rusqlite::{params, Connection, Result};
 use std::fs;
 use std::io;
-use std::path::PathBuf;
 use std::path::Path;
-use zip::ZipArchive;
-use log::{info, warn};
+use std::path::PathBuf;
 use tauri::path::BaseDirectory;
 use tauri::Manager;
+use zip::ZipArchive;
 
 // Struct untuk menampung data yang akan dikirim ke frontend
 #[derive(serde::Serialize, Debug)]
@@ -24,11 +24,11 @@ fn get_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
     let app_data_dir = app_handle
         .path()
         .resolve("cache", BaseDirectory::AppData)
-       .map_err(|_| "Failed to resolve app data directory")?;
-    
+        .map_err(|_| "Failed to resolve app data directory".to_string())?;
+
     fs::create_dir_all(&app_data_dir)
         .map_err(|e| format!("Failed to create app data directory: {}", e))?;
-    
+
     Ok(app_data_dir.join("cache.sqlite"))
 }
 
@@ -48,15 +48,18 @@ async fn build_cache(app_handle: tauri::AppHandle, zip_dir_path: String) -> Resu
             zip_path        TEXT NOT NULL
         )",
         [],
-    ).map_err(|e| e.to_string())?;
+    )
+    .map_err(|e| e.to_string())?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_file_name ON files (file_name)",
         [],
-    ).map_err(|e| e.to_string())?;
+    )
+    .map_err(|e| e.to_string())?;
 
     // --- PERBAIKAN: Hapus data lama sebelum memasukkan yang baru ---
     info!("Clearing old cache data...");
-    conn.execute("DELETE FROM files", []).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM files", [])
+        .map_err(|e| e.to_string())?;
 
     let paths = fs::read_dir(zip_dir_path).map_err(|e| e.to_string())?;
 
@@ -82,7 +85,7 @@ async fn build_cache(app_handle: tauri::AppHandle, zip_dir_path: String) -> Resu
                     continue;
                 }
             };
-            
+
             let tx = conn.transaction().map_err(|e| e.to_string())?;
             for i in 0..archive.len() {
                 let file_in_zip = archive.by_index(i).map_err(|e| e.to_string())?;
@@ -110,7 +113,12 @@ struct SearchResult {
 }
 
 #[tauri::command]
-async fn search_files(app_handle: tauri::AppHandle, query: String, page: u32, limit: u32) -> Result<SearchResult, String> {
+async fn search_files(
+    app_handle: tauri::AppHandle,
+    query: String,
+    page: u32,
+    limit: u32,
+) -> Result<SearchResult, String> {
     info!("Searching for: {}", query);
     let db_path = get_db_path(&app_handle)?;
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
@@ -119,39 +127,53 @@ async fn search_files(app_handle: tauri::AppHandle, query: String, page: u32, li
     let offset = (page - 1) * limit;
 
     // Get total count
-    let total_count: u64 = conn.query_row(
-        "SELECT COUNT(*) FROM files WHERE file_name LIKE ?1",
-        params![search_query],
-        |row| row.get(0),
-    ).map_err(|e| e.to_string())?;
+    let total_count: u64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM files WHERE file_name LIKE ?1",
+            params![search_query],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
 
     let mut stmt = conn.prepare(
-        "SELECT id, archive_name, file_name, file_size, compressed_size, zip_path FROM files WHERE file_name LIKE ?1 LIMIT ?2 OFFSET ?3"
+        "SELECT id, archive_name, file_name, file_size, compressed_size, zip_path FROM files WHERE file_name LIKE ?1 ORDER BY file_name ASC LIMIT ?2 OFFSET ?3 "
     ).map_err(|e| e.to_string())?;
-    
-    let entries = stmt.query_map(params![search_query, limit, offset], |row| {
-        Ok(FileEntry {
-            id: row.get(0)?,
-            archive_name: row.get(1)?,
-            file_name: row.get(2)?,
-            file_size: row.get(3)?,
-            compressed_size: row.get(4)?,
-            zip_path: row.get(5)?,
+
+    let entries = stmt
+        .query_map(params![search_query, limit, offset], |row| {
+            Ok(FileEntry {
+                id: row.get(0)?,
+                archive_name: row.get(1)?,
+                file_name: row.get(2)?,
+                file_size: row.get(3)?,
+                compressed_size: row.get(4)?,
+                zip_path: row.get(5)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for entry in entries {
         result.push(entry.map_err(|e| e.to_string())?);
     }
-    
+
     info!("Found {} results (total: {}).", result.len(), total_count);
-    Ok(SearchResult { entries: result, total_count })
+    Ok(SearchResult {
+        entries: result,
+        total_count,
+    })
 }
 
 #[tauri::command]
-fn extract_file(zip_path: String, file_name: String, destination: String) -> Result<String, String> {
-    info!("Extracting '{}' from '{}' to '{}'", file_name, zip_path, destination);
+fn extract_file(
+    zip_path: String,
+    file_name: String,
+    destination: String,
+) -> Result<String, String> {
+    info!(
+        "Extracting \"{}\" from \"{}\" to \"{}\"",
+        file_name, zip_path, destination
+    );
 
     let zip_file = fs::File::open(&zip_path).map_err(|e| e.to_string())?;
     let mut archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
@@ -168,7 +190,7 @@ fn extract_file(zip_path: String, file_name: String, destination: String) -> Res
 
     let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
     io::copy(&mut file_to_extract, &mut outfile).map_err(|e| e.to_string())?;
-    
+
     info!("Successfully extracted file to: {}", outpath.display());
     Ok(outpath.display().to_string())
 }
@@ -193,13 +215,61 @@ fn show_item_in_folder_custom(path: String) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
-            .arg(Path::new(&path).parent().unwrap_or_else(|| Path::new(&path))) // xdg-open opens directory, not selects item
+            .arg(
+                Path::new(&path)
+                    .parent()
+                    .unwrap_or_else(|| Path::new(&path)),
+            ) // xdg-open opens directory, not selects item
             .spawn()
             .map_err(|e| format!("Failed to open file manager: {}", e))?;
     }
     Ok(())
 }
 
+#[tauri::command]
+async fn extract_files(
+    app_handle: tauri::AppHandle,
+    ids: Vec<i64>,
+    destination: String,
+) -> Result<String, String> {
+    info!("Extracting {} files to \"{}\"", ids.len(), destination);
+
+    let db_path = get_db_path(&app_handle)?;
+    let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+
+    // Create destination directory if it doesn't exist
+    fs::create_dir_all(&destination).map_err(|e| e.to_string())?;
+
+    for id in ids {
+        let mut stmt = conn
+            .prepare("SELECT zip_path, file_name FROM files WHERE id = ?1")
+            .map_err(|e| e.to_string())?;
+        let (zip_path, file_name): (String, String) = stmt
+            .query_row(params![id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| e.to_string())?;
+
+        info!("Extracting \"{}\" from \"{}\"", file_name, zip_path);
+
+        let zip_file = fs::File::open(&zip_path).map_err(|e| e.to_string())?;
+        let mut archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
+
+        let mut file_to_extract = archive.by_name(&file_name).map_err(|e| e.to_string())?;
+
+        let outpath = Path::new(&destination).join(file_to_extract.name());
+
+        if let Some(p) = outpath.parent() {
+            if !p.exists() {
+                fs::create_dir_all(p).map_err(|e| e.to_string())?;
+            }
+        }
+
+        let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
+        io::copy(&mut file_to_extract, &mut outfile).map_err(|e| e.to_string())?;
+    }
+
+    info!("Successfully extracted all files to: {}", destination);
+    Ok(destination)
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -207,7 +277,13 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![build_cache, search_files, extract_file, show_item_in_folder_custom])
+        .invoke_handler(tauri::generate_handler![
+            build_cache,
+            search_files,
+            extract_file,
+            show_item_in_folder_custom,
+            extract_files
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

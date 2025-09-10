@@ -62,10 +62,14 @@
             </select>
           </div>
         </header>
+        <div class="grid">
+          <button id="bulk-extract-btn" disabled>Bulk Extract Selected</button>
+        </div>
         <figure>
           <table role="grid">
             <thead>
               <tr>
+                <th scope="col"><input type="checkbox" id="select-all-checkbox"></th>
                 <th scope="col">File Name</th>
                 <th scope="col">Size</th>
                 <th scope="col">Found in Archive</th>
