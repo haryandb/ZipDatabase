@@ -1,9 +1,10 @@
 use log::{info, warn};
+use rayon::prelude::*;
 use rusqlite::{params, Connection, Result};
+use std::collections::HashMap;
 use std::fs;
 use std::io;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::path::BaseDirectory;
 use tauri::Manager;
 use zip::ZipArchive;
@@ -240,31 +241,63 @@ async fn extract_files(
     // Create destination directory if it doesn't exist
     fs::create_dir_all(&destination).map_err(|e| e.to_string())?;
 
-    for id in ids {
-        let mut stmt = conn
-            .prepare("SELECT zip_path, file_name FROM files WHERE id = ?1")
-            .map_err(|e| e.to_string())?;
-        let (zip_path, file_name): (String, String) = stmt
-            .query_row(params![id], |row| Ok((row.get(0)?, row.get(1)?)))
-            .map_err(|e| e.to_string())?;
+    // 1. Fetch all file data at once
+    let ids_str: Vec<String> = ids.iter().map(|id| id.to_string()).collect();
+    let query = format!(
+        "SELECT zip_path, file_name FROM files WHERE id IN ({})",
+        ids_str.join(",")
+    );
 
-        info!("Extracting \"{}\" from \"{}\"", file_name, zip_path);
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let file_iter = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| e.to_string())?;
 
-        let zip_file = fs::File::open(&zip_path).map_err(|e| e.to_string())?;
-        let mut archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
+    // 2. Group files by archive
+    let mut files_by_archive: HashMap<String, Vec<String>> = HashMap::new();
+    for result in file_iter {
+        let (zip_path, file_name): (String, String) = result.map_err(|e| e.to_string())?;
+        files_by_archive
+            .entry(zip_path)
+            .or_default()
+            .push(file_name);
+    }
 
-        let mut file_to_extract = archive.by_name(&file_name).map_err(|e| e.to_string())?;
+    // 3. Parallel extraction
+    let extraction_results: Vec<Result<(), String>> = files_by_archive
+        .par_iter()
+        .map(|(zip_path, file_names)| {
+            info!(
+                "Processing archive: \"{}\" for {} files",
+                zip_path,
+                file_names.len()
+            );
+            let zip_file = fs::File::open(zip_path).map_err(|e| e.to_string())?;
+            let mut archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
 
-        let outpath = Path::new(&destination).join(file_to_extract.name());
+            for file_name in file_names {
+                let mut file_to_extract = archive.by_name(file_name).map_err(|e| e.to_string())?;
+                let outpath = Path::new(&destination).join(file_to_extract.name());
 
-        if let Some(p) = outpath.parent() {
-            if !p.exists() {
-                fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                if let Some(p) = outpath.parent() {
+                    if !p.exists() {
+                        fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                    }
+                }
+
+                let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
+                io::copy(&mut file_to_extract, &mut outfile).map_err(|e| e.to_string())?;
+                info!("Extracted \"{}\"", file_name);
             }
-        }
+            Ok(())
+        })
+        .collect();
 
-        let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
-        io::copy(&mut file_to_extract, &mut outfile).map_err(|e| e.to_string())?;
+    // Check for errors during parallel extraction
+    for result in extraction_results {
+        if let Err(e) = result {
+            return Err(e);
+        }
     }
 
     info!("Successfully extracted all files to: {}", destination);

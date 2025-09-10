@@ -55,6 +55,7 @@ window.addEventListener("DOMContentLoaded", () => {
   // Bulk extract controls
   const selectAllCheckbox = document.querySelector<HTMLInputElement>("#select-all-checkbox");
   const bulkExtractBtn = document.querySelector<HTMLButtonElement>("#bulk-extract-btn");
+  const extractAllBtn = document.querySelector<HTMLButtonElement>("#extract-all-btn");
 
   const selectedFiles = new Set<number>();
 
@@ -75,6 +76,13 @@ window.addEventListener("DOMContentLoaded", () => {
     if (bulkExtractBtn) {
       bulkExtractBtn.disabled = selectedFiles.size === 0;
       bulkExtractBtn.textContent = `Bulk Extract Selected (${selectedFiles.size})`;
+    }
+  }
+
+  function updateExtractAllButton() {
+    if (extractAllBtn) {
+      extractAllBtn.disabled = totalResults === 0;
+      extractAllBtn.textContent = `Extract All (${totalResults})`;
     }
   }
 
@@ -163,6 +171,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     searchBtn.setAttribute('aria-busy', 'true');
     searchBtn.disabled = true;
+    updateExtractAllButton(); // Disable button during search
 
     // Reset selection
     selectedFiles.clear();
@@ -183,6 +192,7 @@ window.addEventListener("DOMContentLoaded", () => {
       showStatus("Search complete.");
       renderResults(searchResult.entries);
       updatePaginationControls();
+      updateExtractAllButton(); // Update button with results
 
     } catch (e) {
       showStatus(`Error: ${e}`);
@@ -190,6 +200,7 @@ window.addEventListener("DOMContentLoaded", () => {
       totalPages = 0;
       renderResults([]); // Clear results on error
       updatePaginationControls();
+      updateExtractAllButton(); // Update button on error
     } finally {
       searchBtn.setAttribute('aria-busy', 'false');
       searchBtn.disabled = false;
@@ -238,7 +249,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // New event listener for items per page select
   itemsPerPageSelect?.addEventListener("change", async () => {
-    ITEMS_PER_PAGE = parseInt(itemsPerPageSelect.value);
+    if (itemsPerPageSelect.value === "all") {
+      ITEMS_PER_PAGE = 1000000000;
+    } else {
+      ITEMS_PER_PAGE = parseInt(itemsPerPageSelect.value);
+    }
     currentPage = 1; // Reset to first page when items per page changes
     await performSearch();
   });
@@ -282,6 +297,38 @@ window.addEventListener("DOMContentLoaded", () => {
     } finally {
       bulkExtractBtn.setAttribute('aria-busy', 'false');
       bulkExtractBtn.disabled = false;
+    }
+  });
+
+  extractAllBtn?.addEventListener('click', async () => {
+    if (totalResults === 0) return;
+
+    showStatus(`Extracting all ${totalResults} files...`);
+    extractAllBtn.setAttribute('aria-busy', 'true');
+    extractAllBtn.disabled = true;
+
+    try {
+      // Fetch all results from the backend
+      const searchResult: SearchResult = await invoke('search_files', {
+        query: searchInput.value,
+        page: 1,
+        limit: 1000000000 // A large number to get all results
+      });
+
+      const downloadsPath = await downloadDir();
+      const destination = `${downloadsPath}/ZipCache_Extraction_All`;
+      const ids = searchResult.entries.map(entry => entry.id);
+      const result: string = await invoke('extract_files', {
+        ids: ids,
+        destination: destination
+      });
+      showStatus(`${totalResults} files extracted to ${result}. Opening folder...`);
+      await invoke('show_item_in_folder_custom', { path: result });
+    } catch (e) {
+      showStatus(`Error during bulk extraction: ${e}`);
+    } finally {
+      extractAllBtn.setAttribute('aria-busy', 'false');
+      extractAllBtn.disabled = false;
     }
   });
 });
