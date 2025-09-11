@@ -423,6 +423,12 @@ async fn extract_files(
                 let outpath = Path::new(&destination).join(file_to_extract.name());
 
                 // --- Zip Slip Security Check ---
+                if let Some(p) = outpath.parent() {
+                    if !p.exists() {
+                        fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                    }
+                }
+
                 let canonical_outpath = fs::canonicalize(outpath.parent().unwrap_or(Path::new("/")))
                     .map_err(|e| format!("Failed to canonicalize output path: {}", e))?;
 
@@ -430,12 +436,6 @@ async fn extract_files(
                     return Err(format!("Zip Slip detected! Attempt to write outside destination: {}", outpath.display()));
                 }
                 // ---
-
-                if let Some(p) = outpath.parent() {
-                    if !p.exists() {
-                        fs::create_dir_all(p).map_err(|e| e.to_string())?;
-                    }
-                }
 
                 let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
                 io::copy(&mut file_to_extract, &mut outfile).map_err(|e| e.to_string())?;
