@@ -357,6 +357,7 @@ async fn extract_files(
     app_handle: tauri::AppHandle,
     ids: Vec<i64>,
     destination: String,
+    exclude: Option<Vec<String>>,
 ) -> Result<String, String> {
     info!("Extracting {} entries to \"{}\"", ids.len(), destination);
 
@@ -404,19 +405,36 @@ async fn extract_files(
 
     let extraction_results: Vec<Result<(), String>> = all_files_to_extract
         .par_iter()
-        .map(|(source_zip_file_path, files_in_zip)| {
+        .map(|(source_zip_file_path, files_in_zip_raw)| {
             info!(
                 "Processing archive: \"{}\" for {} files",
                 source_zip_file_path,
-                files_in_zip.len()
+                files_in_zip_raw.len()
             );
+
+            let files_to_process: Vec<&String> = if let Some(exclude_patterns) = &exclude {
+                files_in_zip_raw.iter().filter(|file_name_in_zip| {
+                    !exclude_patterns.iter().any(|pattern| {
+                        // Simple contains check for now, can be extended to glob/regex
+                        file_name_in_zip.contains(pattern)
+                    })
+                }).collect()
+            } else {
+                files_in_zip_raw.iter().collect()
+            };
+
+            if files_to_process.is_empty() {
+                info!("No files to extract from \"{}\" after applying exclusions.", source_zip_file_path);
+                return Ok(());
+            }
+
             let zip_file = fs::File::open(source_zip_file_path).map_err(|e| e.to_string())?;
             let mut archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
 
             let canonical_destination = fs::canonicalize(&destination)
                 .map_err(|e| format!("Failed to canonicalize destination path: {}", e))?;
 
-            for file_name_in_zip in files_in_zip {
+            for file_name_in_zip in files_to_process {
                 let mut file_to_extract = archive
                     .by_name(file_name_in_zip)
                     .map_err(|e| format!("File not found in zip: {}: {}", file_name_in_zip, e.to_string()))?;

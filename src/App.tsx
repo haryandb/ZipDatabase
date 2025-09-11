@@ -182,7 +182,8 @@ function App() {
       const destination = `${downloadsPath}/ZipCache_Extraction`;
       const result: string = await invoke('extract_files', {
         ids: Array.from(selectedFiles),
-        destination: destination
+        destination: destination,
+        exclude: excludePatterns.split(',').map(p => p.trim()).filter(p => p.length > 0)
       });
       showStatus(`${selectedFiles.size} files extracted to ${result}. Opening folder...`);
       await invoke('show_item_in_folder_custom', { path: result });
@@ -217,7 +218,8 @@ function App() {
       const ids = searchResult.entries.map(entry => entry.id);
       const result: string = await invoke('extract_files', {
         ids: ids,
-        destination: destination
+        destination: destination,
+        exclude: excludeArr
       });
       showStatus(`${totalResults} files extracted to ${result}. Opening folder...`);
       await invoke('show_item_in_folder_custom', { path: result });
