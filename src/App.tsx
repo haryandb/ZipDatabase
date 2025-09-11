@@ -44,6 +44,8 @@ function Home() {
   const [isExtractingBulk, setIsExtractingBulk] = useState(false);
   const [isExtractingAll, setIsExtractingAll] = useState(false);
 
+  const [jumpPageInput, setJumpPageInput] = useState('');
+
   // Helper to show status messages
   const showStatus = useCallback((message: string) => {
     setStatusMessage(message);
@@ -195,6 +197,16 @@ function Home() {
       showStatus(`Error during bulk extraction: ${e}`);
     } finally {
       setIsExtractingBulk(false);
+    }
+  };
+
+  const handleJumpPage = () => {
+    const page = parseInt(jumpPageInput, 10);
+    if (!isNaN(page) && page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      setJumpPageInput(''); // Clear input after jumping
+    } else {
+      showStatus(`Invalid page number. Please enter a number between 1 and ${totalPages}.`);
     }
   };
 
@@ -427,6 +439,28 @@ function Home() {
               </button>
             </li>
           </ul>
+          <div className="flex items-center space-x-2">
+            <input
+              type="number"
+              id="jump-page-input"
+              value={jumpPageInput}
+              onChange={(e) => setJumpPageInput(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleJumpPage();
+                }
+              }}
+              className="border border-gray-300 rounded-md p-2 w-20 text-center focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Page"
+              min="1"
+              max={totalPages}
+              disabled={isSearching || totalPages === 0}
+            />
+            <button onClick={handleJumpPage} disabled={isSearching || totalPages === 0}
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50">
+              Go
+            </button>
+          </div>
         </nav>
       </article>
     </main>
