@@ -3,11 +3,11 @@ import { downloadDir } from '@tauri-apps/api/path'; // Import downloadDir
 
 interface FileEntry {
   id: number;
-  archive_name: string;
-  file_name: string;
-  file_size: number;
-  compressed_size: number;
-  zip_path: string; // Path lengkap ke file zip
+  name: string;
+  path: string;
+  full_path: string;
+  is_folder: boolean;
+  zip_path: string;
 }
 
 interface SearchResult {
@@ -101,7 +101,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (entries.length === 0 && totalResults === 0) {
       const row = resultsTbody.insertRow();
       const cell = row.insertCell();
-      cell.colSpan = 5;
+      cell.colSpan = 3; // Adjusted colSpan: Checkbox, File Name, Type, Actions
       cell.textContent = 'No results found.';
       cell.style.textAlign = 'center';
       return;
@@ -111,8 +111,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const row = resultsTbody.insertRow();
       const cellCheckbox = row.insertCell();
       const cellFile = row.insertCell();
-      const cellSize = row.insertCell();
-      const cellArchive = row.insertCell();
+      const cellType = row.insertCell(); // New cell for Type (File/Folder)
       const cellAction = row.insertCell(); // Sel untuk tombol
 
       const checkbox = document.createElement('input');
@@ -130,9 +129,8 @@ window.addEventListener("DOMContentLoaded", () => {
         updateBulkExtractButton();
       });
 
-      cellFile.textContent = entry.file_name;
-      cellSize.textContent = formatBytes(entry.file_size);
-      cellArchive.textContent = entry.archive_name;
+      cellFile.textContent = entry.full_path; // Display full_path
+      cellType.textContent = entry.is_folder ? 'Folder' : 'File'; // Display type
 
       // Buat tombol Extract
       const extractBtn = document.createElement('button');
@@ -142,20 +140,19 @@ window.addEventListener("DOMContentLoaded", () => {
 
       // Tambahkan event listener
       extractBtn.addEventListener('click', async () => {
-        showStatus(`Extracting ${entry.file_name}...`);
+        showStatus(`Extracting ${entry.full_path}...`);
         extractBtn.setAttribute('aria-busy', 'true');
         extractBtn.disabled = true;
         try {
           const downloadsPath = await downloadDir();
           const extractedFilePath: string = await invoke('extract_file', {
-            zipPath: entry.zip_path,
-            fileName: entry.file_name,
+            id: entry.id, // Pass the ID for extraction
             destination: downloadsPath
           });
-          showStatus(`'${entry.file_name}' extracted. Opening location in file explorer...`);
+          showStatus(`'${entry.full_path}' extracted. Opening location in file explorer...`);
           await invoke('show_item_in_folder_custom', { path: extractedFilePath }); // Buka lokasi file yang diekstrak di file explorer
         } catch (e) {
-          showStatus(`Error extracting file: ${entry.file_name} ${e}`);
+          showStatus(`Error extracting file: ${entry.full_path} ${e}`);
         } finally {
           extractBtn.setAttribute('aria-busy', 'false');
           extractBtn.disabled = false;
