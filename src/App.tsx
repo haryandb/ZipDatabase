@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { downloadDir } from '@tauri-apps/api/path';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import CachedPaths from './components/CachedPaths';
 
 interface FileEntry {
   id: number;
@@ -16,7 +18,7 @@ interface SearchResult {
   total_count: number;
 }
 
-function App() {
+function Home() {
   // State variables
   const [zipDirPath, setZipDirPath] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -425,6 +427,27 @@ function App() {
         </nav>
       </article>
     </main>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <nav className="bg-gray-800 p-4 text-white">
+        <ul className="flex space-x-4">
+          <li>
+            <Link to="/" className="hover:text-gray-300">Home</Link>
+          </li>
+          <li>
+            <Link to="/cached-paths" className="hover:text-gray-300">Cached Paths</Link>
+          </li>
+        </ul>
+      </nav>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/cached-paths" element={<CachedPaths />} />
+      </Routes>
+    </Router>
   );
 }
 

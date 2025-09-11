@@ -1,3 +1,4 @@
+use flate2::read::GzDecoder;
 use log::{info, warn};
 use rayon::prelude::*;
 use rusqlite::{params, Connection, Result};
@@ -5,6 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use tar::Archive;
 use tauri::path::BaseDirectory;
 use tauri::Manager;
 use zip::ZipArchive;
@@ -47,7 +49,8 @@ async fn build_cache(app_handle: tauri::AppHandle, zip_dir_path: String) -> Resu
             full_path TEXT NOT NULL,
             is_folder BOOLEAN NOT NULL,
             zip_path TEXT NOT NULL,
-            source_zip_file_path TEXT NOT NULL
+            source_zip_file_path TEXT NOT NULL,
+            source_dir_path TEXT NOT NULL
         )",
         [],
     )
@@ -59,18 +62,18 @@ async fn build_cache(app_handle: tauri::AppHandle, zip_dir_path: String) -> Resu
     .map_err(|e| e.to_string())?;
 
     // --- PERBAIKAN: Hapus data lama sebelum memasukkan yang baru ---
-    info!("Clearing old cache data...");
-    conn.execute("DELETE FROM zip_entries", [])
+    info!("Clearing old cache data for path: {}", zip_dir_path);
+    conn.execute("DELETE FROM zip_entries WHERE source_dir_path = ?1", params![&zip_dir_path])
         .map_err(|e| e.to_string())?;
 
-    let paths = fs::read_dir(zip_dir_path).map_err(|e| e.to_string())?;
+    let paths = fs::read_dir(zip_dir_path.clone()).map_err(|e| e.to_string())?;
 
     for path in paths {
         let path = path.map_err(|e| e.to_string())?.path();
         if path.is_file() && path.extension().and_then(std::ffi::OsStr::to_str) == Some("zip") {
             let archive_name = path.file_name().unwrap().to_str().unwrap().to_string();
             let zip_file_path_str = path.to_str().unwrap_or("").to_string(); // Dapatkan full path file zip
-            info!("Processing archive: {}", archive_name);
+            info!("Processing ZIP archive: {}", archive_name);
 
             let file = match fs::File::open(&path) {
                 Ok(f) => f,
@@ -109,12 +112,85 @@ async fn build_cache(app_handle: tauri::AppHandle, zip_dir_path: String) -> Resu
                     .to_string();
 
                 tx.execute(
-                    "INSERT INTO zip_entries (name, path, full_path, is_folder, zip_path, source_zip_file_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    params![&name, &parent_path, &full_path, is_folder as i32, &full_path, &zip_file_path_str],
+                    "INSERT INTO zip_entries (name, path, full_path, is_folder, zip_path, source_zip_file_path, source_dir_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![&name, &parent_path, &full_path, is_folder as i32, &full_path, &zip_file_path_str, &zip_dir_path],
                 ).map_err(|e| e.to_string())?;
             }
             tx.commit().map_err(|e| e.to_string())?;
-            info!("Finished processing archive: {}", archive_name);
+            info!("Finished processing ZIP archive: {}", archive_name);
+        } else if path.is_file()
+            && path.extension().and_then(std::ffi::OsStr::to_str) == Some("gz")
+            && path
+                .file_stem()
+                .and_then(std::ffi::OsStr::to_str)
+                .map_or(false, |s| s.ends_with(".tar"))
+        {
+            let archive_name = path.file_name().unwrap().to_str().unwrap().to_string();
+            let tar_gz_file_path_str = path.to_str().unwrap_or("").to_string();
+            info!("Processing TAR.GZ archive: {}", archive_name);
+
+            let file = match fs::File::open(&path) {
+                Ok(f) => f,
+                Err(e) => {
+                    warn!("Could not open file {}: {}. Skipping.", path.display(), e);
+                    continue;
+                }
+            };
+
+            let decoder = GzDecoder::new(file);
+            let mut archive = Archive::new(decoder);
+
+            let tx = conn.transaction().map_err(|e| e.to_string())?;
+            let entries = match archive.entries() {
+                Ok(e) => e,
+                Err(e) => {
+                    warn!(
+                        "Failed to read entries from TAR.GZ archive '{}': {}. Skipping archive.",
+                        &archive_name, e
+                    );
+                    continue;
+                }
+            };
+
+            for entry_result in entries {
+                let entry = match entry_result {
+                    Ok(e) => e,
+                    Err(e) => {
+                        warn!(
+                            "Error reading entry from TAR.GZ archive '{}': {}. Skipping entry.",
+                            &archive_name, e
+                        );
+                        continue;
+                    }
+                };
+                let full_path = entry
+                    .path()
+                    .map_err(|e| e.to_string())?
+                    .to_string_lossy()
+                    .to_string();
+                let is_folder = entry.header().entry_type().is_dir();
+
+                let name = Path::new(&full_path)
+                    .file_name()
+                    .unwrap_or_else(|| std::ffi::OsStr::new(""))
+                    .to_str()
+                    .unwrap_or("")
+                    .to_string();
+
+                let parent_path = Path::new(&full_path)
+                    .parent()
+                    .unwrap_or_else(|| Path::new("/"))
+                    .to_str()
+                    .unwrap_or("")
+                    .to_string();
+
+                tx.execute(
+                    "INSERT INTO zip_entries (name, path, full_path, is_folder, zip_path, source_zip_file_path, source_dir_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![&name, &parent_path, &full_path, is_folder as i32, &full_path, &tar_gz_file_path_str, &zip_dir_path],
+                ).map_err(|e| e.to_string())?;
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+            info!("Finished processing TAR.GZ archive: {}", archive_name);
         }
     }
 
@@ -267,7 +343,9 @@ async fn extract_file(
             // If it's a folder, get all files within that folder
             let folder_prefix = format!("{}/", entry_zip_path.trim_end_matches('/'));
             let mut stmt = conn
-                .prepare("SELECT zip_path FROM zip_entries WHERE zip_path LIKE ?1 AND is_folder = 0")
+                .prepare(
+                    "SELECT zip_path FROM zip_entries WHERE zip_path LIKE ?1 AND is_folder = 0",
+                )
                 .map_err(|e| e.to_string())?;
             let rows = stmt
                 .query_map(params![format!("{}%", folder_prefix)], |row| row.get(0))
@@ -286,22 +364,31 @@ async fn extract_file(
         }
 
         let files_to_process: Vec<String> = if let Some(exclude_patterns) = exclude {
-            info!("Applying exclude patterns to single file extraction: {:?}", exclude_patterns);
-            files_to_extract.into_iter().filter(|file_name_in_zip| {
-                let should_exclude = exclude_patterns.iter().any(|pattern| {
-                    let matches = file_name_in_zip.contains(pattern);
-                    if matches {
-                        info!("  Excluding '{}' because it contains '{}'", file_name_in_zip, pattern);
+            info!(
+                "Applying exclude patterns to single file extraction: {:?}",
+                exclude_patterns
+            );
+            files_to_extract
+                .into_iter()
+                .filter(|file_name_in_zip| {
+                    let should_exclude = exclude_patterns.iter().any(|pattern| {
+                        let matches = file_name_in_zip.contains(pattern);
+                        if matches {
+                            info!(
+                                "  Excluding '{}' because it contains '{}'",
+                                file_name_in_zip, pattern
+                            );
+                        }
+                        matches
+                    });
+                    if should_exclude {
+                        info!("File '{}' will be excluded.", file_name_in_zip);
+                    } else {
+                        info!("File '{}' will be included.", file_name_in_zip);
                     }
-                    matches
-                });
-                if should_exclude {
-                    info!("File '{}' will be excluded.", file_name_in_zip);
-                } else {
-                    info!("File '{}' will be included.", file_name_in_zip);
-                }
-                !should_exclude
-            }).collect()
+                    !should_exclude
+                })
+                .collect()
         } else {
             info!("No exclude patterns provided for single file extraction.");
             files_to_extract
@@ -311,47 +398,110 @@ async fn extract_file(
             return Ok("No files extracted due to exclusion.".to_string());
         }
 
-        let zip_file = fs::File::open(&source_zip_file_path).map_err(|e| e.to_string())?;
-        let mut archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
+        let extracted_paths = if source_zip_file_path.ends_with(".zip") {
+            let zip_file = fs::File::open(&source_zip_file_path).map_err(|e| e.to_string())?;
+            let mut archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
+            let mut paths = Vec::new();
+            for file_name_in_zip in files_to_process {
+                let mut file_to_extract = archive.by_name(&file_name_in_zip).map_err(|e| {
+                    format!(
+                        "File not found in zip: {}: {}",
+                        file_name_in_zip,
+                        e.to_string()
+                    )
+                })?;
 
-        let mut extracted_paths = Vec::new();
+                let outpath = Path::new(&destination).join(file_to_extract.name());
 
-        for file_name_in_zip in files_to_process {
-            let mut file_to_extract = archive.by_name(&file_name_in_zip).map_err(|e| {
-                format!(
-                    "File not found in zip: {}: {}",
-                    file_name_in_zip,
-                    e.to_string()
-                )
-            })?;
+                if let Some(p) = outpath.parent() {
+                    if !p.exists() {
+                        fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                    }
+                }
 
-            let outpath = Path::new(&destination).join(file_to_extract.name());
+                // --- Zip Slip Security Check ---
+                let canonical_destination = fs::canonicalize(&destination)
+                    .map_err(|e| format!("Failed to canonicalize destination path: {}", e))?;
+                let canonical_outpath =
+                    fs::canonicalize(outpath.parent().unwrap_or(Path::new("/")))
+                        .map_err(|e| format!("Failed to canonicalize output path: {}", e))?;
 
-            if let Some(p) = outpath.parent() {
-                if !p.exists() {
-                    fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                if !canonical_outpath.starts_with(&canonical_destination) {
+                    return Err(format!(
+                        "Zip Slip detected! Attempt to write outside destination: {}",
+                        outpath.display()
+                    ));
+                }
+                // ---
+
+                let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
+                io::copy(&mut file_to_extract, &mut outfile).map_err(|e| e.to_string())?;
+                info!("Extracted \"{}\"", file_name_in_zip);
+                paths.push(outpath.display().to_string());
+            }
+            paths
+        } else if source_zip_file_path.ends_with(".tar.gz") {
+            let tar_gz_file = fs::File::open(&source_zip_file_path).map_err(|e| e.to_string())?;
+            let decoder = GzDecoder::new(tar_gz_file);
+            let mut archive = Archive::new(decoder);
+            let mut paths = Vec::new();
+
+            for file_name_in_tar_gz in files_to_process {
+                let mut found_entry = false;
+                for entry_result in archive.entries().map_err(|e| e.to_string())? {
+                    let mut entry = entry_result.map_err(|e| e.to_string())?;
+                    let entry_path = entry
+                        .path()
+                        .map_err(|e| e.to_string())?
+                        .to_string_lossy()
+                        .to_string();
+
+                    if entry_path == file_name_in_tar_gz {
+                        let outpath =
+                            Path::new(&destination).join(entry.path().map_err(|e| e.to_string())?);
+
+                        if let Some(p) = outpath.parent() {
+                            if !p.exists() {
+                                fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                            }
+                        }
+
+                        // --- Zip Slip Security Check ---
+                        let canonical_destination =
+                            fs::canonicalize(&destination).map_err(|e| {
+                                format!("Failed to canonicalize destination path: {}", e)
+                            })?;
+                        let canonical_outpath = fs::canonicalize(
+                            outpath.parent().unwrap_or(Path::new("/")),
+                        )
+                        .map_err(|e| format!("Failed to canonicalize output path: {}", e))?;
+
+                        if !canonical_outpath.starts_with(&canonical_destination) {
+                            return Err(format!(
+                                "Zip Slip detected! Attempt to write outside destination: {}",
+                                outpath.display()
+                            ));
+                        }
+                        // ---
+
+                        entry.unpack(&outpath).map_err(|e| e.to_string())?;
+                        info!("Extracted \"{}\"", file_name_in_tar_gz);
+                        paths.push(outpath.display().to_string());
+                        found_entry = true;
+                        break;
+                    }
+                }
+                if !found_entry {
+                    return Err(format!("File not found in tar.gz: {}", file_name_in_tar_gz));
                 }
             }
-
-            // --- Zip Slip Security Check ---
-            let canonical_destination = fs::canonicalize(&destination)
-                .map_err(|e| format!("Failed to canonicalize destination path: {}", e))?;
-            let canonical_outpath = fs::canonicalize(outpath.parent().unwrap_or(Path::new("/")))
-                .map_err(|e| format!("Failed to canonicalize output path: {}", e))?;
-
-            if !canonical_outpath.starts_with(&canonical_destination) {
-                return Err(format!(
-                    "Zip Slip detected! Attempt to write outside destination: {}",
-                    outpath.display()
-                ));
-            }
-            // ---
-
-            let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
-            io::copy(&mut file_to_extract, &mut outfile).map_err(|e| e.to_string())?;
-            info!("Extracted \"{}\"", file_name_in_zip);
-            extracted_paths.push(outpath.display().to_string());
-        }
+            paths
+        } else {
+            return Err(format!(
+                "Unsupported archive type: {}",
+                source_zip_file_path
+            ));
+        };
 
         let final_path = extracted_paths
             .first()
@@ -359,7 +509,9 @@ async fn extract_file(
             .to_string();
         info!("Successfully extracted to: {}", final_path);
         Ok(final_path)
-    }).await.unwrap_or_else(|e| Err(e.to_string()))
+    })
+    .await
+    .unwrap_or_else(|e| Err(e.to_string()))
 }
 
 #[tauri::command]
@@ -493,45 +645,95 @@ async fn extract_files(
                     return Ok(());
                 }
 
-                let zip_file = fs::File::open(source_zip_file_path).map_err(|e| e.to_string())?;
-                let mut archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
+                if source_zip_file_path.ends_with(".zip") {
+                    let zip_file = fs::File::open(source_zip_file_path).map_err(|e| e.to_string())?;
+                    let mut archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
 
-                let canonical_destination = fs::canonicalize(&destination)
-                    .map_err(|e| format!("Failed to canonicalize destination path: {}", e))?;
+                    let canonical_destination = fs::canonicalize(&destination)
+                        .map_err(|e| format!("Failed to canonicalize destination path: {}", e))?;
 
-                for file_name_in_zip in files_to_process {
-                    let mut file_to_extract = archive.by_name(file_name_in_zip).map_err(|e| {
-                        format!(
-                            "File not found in zip: {}: {}",
-                            file_name_in_zip,
-                            e.to_string()
-                        )
-                    })?;
+                    for file_name_in_zip in files_to_process {
+                        let mut file_to_extract = archive.by_name(file_name_in_zip).map_err(|e| {
+                            format!(
+                                "File not found in zip: {}: {}",
+                                file_name_in_zip,
+                                e.to_string()
+                            )
+                        })?;
 
-                    let outpath = Path::new(&destination).join(file_to_extract.name());
+                        let outpath = Path::new(&destination).join(file_to_extract.name());
 
-                    // --- Zip Slip Security Check ---
-                    if let Some(p) = outpath.parent() {
-                        if !p.exists() {
-                            fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                        // --- Zip Slip Security Check ---
+                        if let Some(p) = outpath.parent() {
+                            if !p.exists() {
+                                fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                            }
+                        }
+
+                        let canonical_outpath =
+                            fs::canonicalize(outpath.parent().unwrap_or(Path::new("/")))
+                                .map_err(|e| format!("Failed to canonicalize output path: {}", e))?;
+
+                        if !canonical_outpath.starts_with(&canonical_destination) {
+                            return Err(format!(
+                                "Zip Slip detected! Attempt to write outside destination: {}",
+                                outpath.display()
+                            ));
+                        }
+                        // ---
+
+                        let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
+                        io::copy(&mut file_to_extract, &mut outfile).map_err(|e| e.to_string())?;
+                        info!("Extracted \"{}\"", file_name_in_zip);
+                    }
+                } else if source_zip_file_path.ends_with(".tar.gz") {
+                    let tar_gz_file = fs::File::open(source_zip_file_path).map_err(|e| e.to_string())?;
+                    let decoder = GzDecoder::new(tar_gz_file);
+                    let mut archive = Archive::new(decoder);
+
+                    let canonical_destination = fs::canonicalize(&destination)
+                        .map_err(|e| format!("Failed to canonicalize destination path: {}", e))?;
+
+                    for file_name_in_tar_gz in files_to_process {
+                        let mut found_entry = false;
+                        for entry_result in archive.entries().map_err(|e| e.to_string())? {
+                            let mut entry = entry_result.map_err(|e| e.to_string())?;
+                            let entry_path = entry.path().map_err(|e| e.to_string())?.to_string_lossy().to_string();
+
+                            if entry_path == *file_name_in_tar_gz {
+                                let outpath = Path::new(&destination).join(entry.path().map_err(|e| e.to_string())?);
+
+                                if let Some(p) = outpath.parent() {
+                                    if !p.exists() {
+                                        fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                                    }
+                                }
+
+                                // --- Zip Slip Security Check ---
+                                let canonical_outpath =
+                                    fs::canonicalize(outpath.parent().unwrap_or(Path::new("/")))
+                                        .map_err(|e| format!("Failed to canonicalize output path: {}", e))?;
+
+                                if !canonical_outpath.starts_with(&canonical_destination) {
+                                    return Err(format!(
+                                        "Zip Slip detected! Attempt to write outside destination: {}",
+                                        outpath.display()
+                                    ));
+                                }
+                                // ---
+
+                                entry.unpack(&outpath).map_err(|e| e.to_string())?;
+                                info!("Extracted \"{}\"", file_name_in_tar_gz);
+                                found_entry = true;
+                                break;
+                            }
+                        }
+                        if !found_entry {
+                            return Err(format!("File not found in tar.gz: {}", file_name_in_tar_gz));
                         }
                     }
-
-                    let canonical_outpath =
-                        fs::canonicalize(outpath.parent().unwrap_or(Path::new("/")))
-                            .map_err(|e| format!("Failed to canonicalize output path: {}", e))?;
-
-                    if !canonical_outpath.starts_with(&canonical_destination) {
-                        return Err(format!(
-                            "Zip Slip detected! Attempt to write outside destination: {}",
-                            outpath.display()
-                        ));
-                    }
-                    // ---
-
-                    let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
-                    io::copy(&mut file_to_extract, &mut outfile).map_err(|e| e.to_string())?;
-                    info!("Extracted \"{}\"", file_name_in_zip);
+                } else {
+                    return Err(format!("Unsupported archive type: {}", source_zip_file_path));
                 }
                 Ok(())
             })
@@ -561,8 +763,42 @@ pub fn run() {
             search_files,
             extract_file,
             show_item_in_folder_custom,
-            extract_files
+            extract_files,
+            get_cached_paths
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[derive(serde::Serialize, Debug)]
+struct CachedPathInfo {
+    source_dir_path: String,
+    source_zip_file_path: String,
+}
+
+#[tauri::command]
+async fn get_cached_paths(app_handle: tauri::AppHandle) -> Result<Vec<CachedPathInfo>, String> {
+    info!("Fetching cached paths...");
+    let db_path = get_db_path(&app_handle)?;
+    let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT source_dir_path, source_zip_file_path FROM zip_entries ORDER BY source_dir_path, source_zip_file_path",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let cached_paths = stmt
+        .query_map([], |row| {
+            Ok(CachedPathInfo {
+                source_dir_path: row.get(0)?,
+                source_zip_file_path: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<CachedPathInfo>, rusqlite::Error>>()
+        .map_err(|e| e.to_string())?;
+
+    info!("Found {} unique cached paths.", cached_paths.len());
+    Ok(cached_paths)
 }
