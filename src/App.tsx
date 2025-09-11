@@ -232,7 +232,7 @@ function App() {
   };
 
   return (
-    <main className="max-w-4xl mx-auto p-4">
+    <main className="p-4">
       <header className="text-center mb-8">
         <h1 className="text-4xl font-bold mb-2">ZipCache</h1>
         <p className="text-lg text-gray-600">Cache and search contents of large ZIP archives.</p>
@@ -243,16 +243,17 @@ function App() {
           <strong className="text-xl font-semibold">1. Build Cache</strong>
         </header>
         <p className="mb-4">Enter the absolute path to the directory containing your .zip files.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="flex flex-col md:flex-row gap-4 items-center">
           <input
-            className="border border-gray-300 rounded-md p-2 w-full focus:ring-blue-500 focus:border-blue-500"
             type="text"
             id="zip-dir-path"
             placeholder="e.g., /Users/yourname/Documents/Archives"
             value={zipDirPath}
             onChange={(e) => setZipDirPath(e.target.value)}
+            className="border border-gray-300 rounded-md p-2 flex-grow focus:ring-blue-500 focus:border-blue-500"
           />
-          <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50" id="build-cache-btn" onClick={handleBuildCache} aria-busy={isBuildingCache} disabled={isBuildingCache}>
+          <button id="build-cache-btn" onClick={handleBuildCache} aria-busy={isBuildingCache} disabled={isBuildingCache}
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 flex-shrink-0">
             Build Cache
           </button>
         </div>
@@ -294,13 +295,8 @@ function App() {
             <option value="file">File</option>
             <option value="folder">Folder</option>
           </select>
-          <button
-            id="search-btn"
-            onClick={handleSearch}
-            aria-busy={isSearching}
-            disabled={isSearching}
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-          >
+          <button id="search-btn" onClick={handleSearch} aria-busy={isSearching} disabled={isSearching}
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 inline-block">
             Search
           </button>
           <label htmlFor="unique-results-checkbox" className="flex items-center space-x-2">
@@ -339,7 +335,7 @@ function App() {
             </select>
           </div>
         </header>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div className="flex flex-col md:flex-row gap-4 mb-4">
           <button
             id="bulk-extract-btn"
             onClick={handleBulkExtract}
@@ -360,10 +356,10 @@ function App() {
           </button>
         </div>
         <figure className="overflow-x-auto">
-          <table className="min-w-full bg-white border border-gray-200">
-            <thead>
+          <table className="min-w-full bg-white divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <th scope="col" className="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
                   <input
                     type="checkbox"
                     id="select-all-checkbox"
@@ -372,20 +368,20 @@ function App() {
                     className="form-checkbox h-4 w-4 text-blue-600"
                   />
                 </th>
-                <th scope="col" className="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">File/Folder Name</th>
-                <th scope="col" className="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Type</th>
-                <th scope="col" className="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Actions</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File/Folder Name</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Type</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="bg-white divide-y divide-gray-200">
               {results.length === 0 && totalResults === 0 && !isSearching ? (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-gray-500">No results found.</td>
+                  <td colSpan={4} className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">No results found.</td>
                 </tr>
               ) : (
                 results.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-gray-50">
-                    <td className="py-2 px-4 border-b">
+                  <tr key={entry.id} className="hover:bg-gray-100 even:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap w-12">
                       <input
                         type="checkbox"
                         checked={selectedFiles.has(entry.id)}
@@ -393,9 +389,9 @@ function App() {
                         className="form-checkbox h-4 w-4 text-blue-600"
                       />
                     </td>
-                    <td className="py-2 px-4 border-b text-gray-800">{entry.full_path}</td>
-                    <td className="py-2 px-4 border-b text-gray-800">{entry.is_folder ? 'Folder' : 'File'}</td>
-                    <td className="py-2 px-4 border-b">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{entry.full_path}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{entry.is_folder ? 'Folder' : 'File'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <button
                         onClick={() => handleExtractFile(entry)}
                         className="bg-blue-500 hover:bg-blue-700 text-white text-xs py-1 px-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
@@ -411,16 +407,16 @@ function App() {
         </figure>
 
         <nav aria-label="Pagination" className="flex justify-center items-center space-x-4 mt-4">
-          <ul>
+          <ul className="flex items-center space-x-2">
             <li>
-              <button onClick={handlePrevPage} role="link" disabled={currentPage === 1 || isSearching}
+              <button onClick={handlePrevPage} disabled={currentPage === 1 || isSearching}
                 className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-l disabled:opacity-50">
                 Previous
               </button>
             </li>
             <li><span id="page-info" className="py-2 px-4 bg-gray-100 text-gray-700">Page {currentPage} of {totalPages}</span></li>
             <li>
-              <button onClick={handleNextPage} role="link" disabled={currentPage === totalPages || totalPages === 0 || isSearching}
+              <button onClick={handleNextPage} disabled={currentPage === totalPages || totalPages === 0 || isSearching}
                 className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-r disabled:opacity-50">
                 Next
               </button>
