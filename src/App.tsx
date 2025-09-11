@@ -11,6 +11,7 @@ interface FileEntry {
   full_path: string;
   is_folder: boolean;
   zip_path: string;
+  source_dir_path: string;
 }
 
 interface SearchResult {
@@ -371,6 +372,7 @@ function Home() {
                   />
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File/Folder Name</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cache Build Path</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Type</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
               </tr>
@@ -392,6 +394,7 @@ function Home() {
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{entry.full_path}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{entry.source_dir_path}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{entry.is_folder ? 'Folder' : 'File'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <button

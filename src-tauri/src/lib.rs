@@ -20,6 +20,8 @@ struct FileEntry {
     full_path: String,
     is_folder: bool,
     zip_path: String,
+    source_zip_file_path: String,
+    source_dir_path: String,
 }
 
 // Fungsi untuk mendapatkan path database
@@ -270,9 +272,9 @@ async fn search_files(
 
     // Get entries
     let select_sql = if unique {
-        "MIN(id) as id, name, path, full_path, is_folder, zip_path"
+        "MIN(id) as id, name, path, full_path, is_folder, zip_path, source_zip_file_path, source_dir_path"
     } else {
-        "id, name, path, full_path, is_folder, zip_path"
+        "id, name, path, full_path, is_folder, zip_path, source_zip_file_path, source_dir_path"
     };
 
     let query_sql = format!(
@@ -296,6 +298,8 @@ async fn search_files(
                     full_path: row.get(3)?,
                     is_folder: row.get(4)?,
                     zip_path: row.get(5)?,
+                    source_zip_file_path: row.get(6)?,
+                    source_dir_path: row.get(7)?,
                 })
             },
         )
