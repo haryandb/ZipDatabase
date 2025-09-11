@@ -173,6 +173,7 @@ async fn search_files(
         match et.as_str() {
             "file" => where_clauses.push("is_folder = 0".to_string()),
             "folder" => where_clauses.push("is_folder = 1".to_string()),
+            "all" => { /* do nothing, search both files and folders */ },
             _ => {},
         }
     }

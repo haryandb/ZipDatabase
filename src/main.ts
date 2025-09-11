@@ -38,6 +38,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const excludeInput = document.querySelector<HTMLInputElement>("#exclude-patterns");
   const searchDepthInput = document.querySelector<HTMLInputElement>("#search-depth");
   const uniqueResultsCheckbox = document.querySelector<HTMLInputElement>("#unique-results-checkbox");
+  const entryTypeSelect = document.querySelector<HTMLSelectElement>("#entry-type-select");
 
   const statusContainer = document.querySelector<HTMLElement>("#status-container");
   const resultsContainer = document.querySelector<HTMLElement>("#results-container");
@@ -182,13 +183,16 @@ window.addEventListener("DOMContentLoaded", () => {
       const excludePatterns = excludeInput?.value.split(',').map(p => p.trim()).filter(p => p.length > 0) || [];
       const searchDepth = searchDepthInput?.value ? parseInt(searchDepthInput.value, 10) : null;
       const unique = uniqueResultsCheckbox?.checked || false;
+      const entryType = entryTypeSelect?.value || "all"; // Default to "all" if not selected
+
       const searchResult: SearchResult = await invoke('search_files', {
         query: searchInput.value,
         page: currentPage,
         limit: ITEMS_PER_PAGE,
         exclude: excludePatterns,
         searchDepth: isNaN(searchDepth) ? null : searchDepth,
-        unique: unique
+        unique: unique,
+        entryType: entryType
       });
 
       totalResults = searchResult.total_count;
