@@ -162,7 +162,8 @@ function App() {
       const downloadsPath = await downloadDir();
       const extractedFilePath: string = await invoke('extract_file', {
         id: entry.id,
-        destination: downloadsPath
+        destination: downloadsPath,
+        exclude: excludePatterns.split(',').map(p => p.trim()).filter(p => p.length > 0)
       });
       showStatus(`'${entry.full_path}' extracted. Opening location in file explorer...`);
       await invoke('show_item_in_folder_custom', { path: extractedFilePath });

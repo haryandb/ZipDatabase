@@ -141,10 +141,7 @@ async fn search_files(
 ) -> Result<SearchResult, String> {
     info!(
         "Searching for: '{}', excluding: {:?}, depth: {:?}, unique: {}",
-        query,
-        exclude,
-        search_depth,
-        unique
+        query, exclude, search_depth, unique
     );
     let db_path = get_db_path(&app_handle)?;
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
@@ -165,7 +162,8 @@ async fn search_files(
     }
 
     if let Some(depth) = search_depth {
-        where_clauses.push("(LENGTH(full_path) - LENGTH(REPLACE(full_path, '/', ''))) <= ?".to_string());
+        where_clauses
+            .push("(LENGTH(full_path) - LENGTH(REPLACE(full_path, '/', ''))) <= ?".to_string());
         params.push(Box::new(depth));
     }
 
@@ -173,8 +171,8 @@ async fn search_files(
         match et.as_str() {
             "file" => where_clauses.push("is_folder = 0".to_string()),
             "folder" => where_clauses.push("is_folder = 1".to_string()),
-            "all" => { /* do nothing, search both files and folders */ },
-            _ => {},
+            "all" => { /* do nothing, search both files and folders */ }
+            _ => {}
         }
     }
 
@@ -182,7 +180,10 @@ async fn search_files(
     let group_by_sql = if unique { "GROUP BY full_path" } else { "" };
 
     // Get total count
-    let count_sql = format!("SELECT COUNT(*) FROM (SELECT 1 FROM zip_entries WHERE {} {})", where_sql, group_by_sql);
+    let count_sql = format!(
+        "SELECT COUNT(*) FROM (SELECT 1 FROM zip_entries WHERE {} {})",
+        where_sql, group_by_sql
+    );
     let total_count: u64 = conn
         .query_row(
             &count_sql,
@@ -241,6 +242,7 @@ fn extract_file(
     app_handle: tauri::AppHandle,
     id: i64,
     destination: String,
+    exclude: Option<Vec<String>>,
 ) -> Result<String, String> {
     info!("Extracting entry with ID: {} to \"{}\"", id, destination);
 
@@ -261,9 +263,7 @@ fn extract_file(
         // If it's a folder, get all files within that folder
         let folder_prefix = format!("{}/", entry_zip_path.trim_end_matches('/'));
         let mut stmt = conn
-            .prepare(
-                "SELECT zip_path FROM zip_entries WHERE zip_path LIKE ?1 AND is_folder = 0",
-            )
+            .prepare("SELECT zip_path FROM zip_entries WHERE zip_path LIKE ?1 AND is_folder = 0")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map(params![format!("{}%", folder_prefix)], |row| row.get(0))
@@ -281,15 +281,45 @@ fn extract_file(
         return Err(format!("No files found to extract for ID {}", id));
     }
 
+    let files_to_process: Vec<String> = if let Some(exclude_patterns) = &exclude {
+        info!("Applying exclude patterns to single file extraction: {:?}", exclude_patterns);
+        files_to_extract.into_iter().filter(|file_name_in_zip| {
+            let should_exclude = exclude_patterns.iter().any(|pattern| {
+                let matches = file_name_in_zip.contains(pattern);
+                if matches {
+                    info!("  Excluding '{}' because it contains '{}'", file_name_in_zip, pattern);
+                }
+                matches
+            });
+            if should_exclude {
+                info!("File '{}' will be excluded.", file_name_in_zip);
+            } else {
+                info!("File '{}' will be included.", file_name_in_zip);
+            }
+            !should_exclude
+        }).collect()
+    } else {
+        info!("No exclude patterns provided for single file extraction.");
+        files_to_extract
+    };
+
+    if files_to_process.is_empty() {
+        return Ok("No files extracted due to exclusion.".to_string());
+    }
+
     let zip_file = fs::File::open(&source_zip_file_path).map_err(|e| e.to_string())?;
     let mut archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
 
     let mut extracted_paths = Vec::new();
 
-    for file_name_in_zip in files_to_extract {
-        let mut file_to_extract = archive
-            .by_name(&file_name_in_zip)
-            .map_err(|e| format!("File not found in zip: {}: {}", file_name_in_zip, e.to_string()))?;
+    for file_name_in_zip in files_to_process {
+        let mut file_to_extract = archive.by_name(&file_name_in_zip).map_err(|e| {
+            format!(
+                "File not found in zip: {}: {}",
+                file_name_in_zip,
+                e.to_string()
+            )
+        })?;
 
         let outpath = Path::new(&destination).join(file_to_extract.name());
 
@@ -306,7 +336,10 @@ fn extract_file(
             .map_err(|e| format!("Failed to canonicalize output path: {}", e))?;
 
         if !canonical_outpath.starts_with(&canonical_destination) {
-            return Err(format!("Zip Slip detected! Attempt to write outside destination: {}", outpath.display()));
+            return Err(format!(
+                "Zip Slip detected! Attempt to write outside destination: {}",
+                outpath.display()
+            ));
         }
         // ---
 
@@ -316,7 +349,10 @@ fn extract_file(
         extracted_paths.push(outpath.display().to_string());
     }
 
-    let final_path = extracted_paths.first().unwrap_or(&destination.to_string()).to_string();
+    let final_path = extracted_paths
+        .first()
+        .unwrap_or(&destination.to_string())
+        .to_string();
     info!("Successfully extracted to: {}", final_path);
     Ok(final_path)
 }
@@ -413,18 +449,38 @@ async fn extract_files(
             );
 
             let files_to_process: Vec<&String> = if let Some(exclude_patterns) = &exclude {
-                files_in_zip_raw.iter().filter(|file_name_in_zip| {
-                    !exclude_patterns.iter().any(|pattern| {
-                        // Simple contains check for now, can be extended to glob/regex
-                        file_name_in_zip.contains(pattern)
+                info!("Applying exclude patterns: {:?}", exclude_patterns);
+                files_in_zip_raw
+                    .iter()
+                    .filter(|file_name_in_zip| {
+                        let should_exclude = exclude_patterns.iter().any(|pattern| {
+                            let matches = file_name_in_zip.contains(pattern);
+                            if matches {
+                                info!(
+                                    "  Excluding '{}' because it contains '{}'",
+                                    file_name_in_zip, pattern
+                                );
+                            }
+                            matches
+                        });
+                        if should_exclude {
+                            info!("File '{}' will be excluded.", file_name_in_zip);
+                        } else {
+                            info!("File '{}' will be included.", file_name_in_zip);
+                        }
+                        !should_exclude
                     })
-                }).collect()
+                    .collect()
             } else {
+                info!("No exclude patterns provided.");
                 files_in_zip_raw.iter().collect()
             };
 
             if files_to_process.is_empty() {
-                info!("No files to extract from \"{}\" after applying exclusions.", source_zip_file_path);
+                info!(
+                    "No files to extract from \"{}\" after applying exclusions.",
+                    source_zip_file_path
+                );
                 return Ok(());
             }
 
@@ -435,9 +491,13 @@ async fn extract_files(
                 .map_err(|e| format!("Failed to canonicalize destination path: {}", e))?;
 
             for file_name_in_zip in files_to_process {
-                let mut file_to_extract = archive
-                    .by_name(file_name_in_zip)
-                    .map_err(|e| format!("File not found in zip: {}: {}", file_name_in_zip, e.to_string()))?;
+                let mut file_to_extract = archive.by_name(file_name_in_zip).map_err(|e| {
+                    format!(
+                        "File not found in zip: {}: {}",
+                        file_name_in_zip,
+                        e.to_string()
+                    )
+                })?;
 
                 let outpath = Path::new(&destination).join(file_to_extract.name());
 
@@ -448,11 +508,15 @@ async fn extract_files(
                     }
                 }
 
-                let canonical_outpath = fs::canonicalize(outpath.parent().unwrap_or(Path::new("/")))
-                    .map_err(|e| format!("Failed to canonicalize output path: {}", e))?;
+                let canonical_outpath =
+                    fs::canonicalize(outpath.parent().unwrap_or(Path::new("/")))
+                        .map_err(|e| format!("Failed to canonicalize output path: {}", e))?;
 
                 if !canonical_outpath.starts_with(&canonical_destination) {
-                    return Err(format!("Zip Slip detected! Attempt to write outside destination: {}", outpath.display()));
+                    return Err(format!(
+                        "Zip Slip detected! Attempt to write outside destination: {}",
+                        outpath.display()
+                    ));
                 }
                 // ---
 
@@ -477,6 +541,7 @@ async fn extract_files(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    std::env::set_var("RUST_LOG", "info");
     env_logger::init();
 
     tauri::Builder::default()
