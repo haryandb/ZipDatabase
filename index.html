@@ -7,96 +7,11 @@
   <link rel="stylesheet" href="src/styles.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZipCache</title>
-  <script type="module" src="/src/main.ts" defer></script>
+  <script type="module" src="/src/main.tsx" defer></script>
 </head>
 
 <body>
-  <main class="container">
-    <header>
-      <h1>ZipCache</h1>
-      <p>Cache and search contents of large ZIP archives.</p>
-    </header>
-
-    <article>
-      <header>
-        <strong>1. Build Cache</strong>
-      </header>
-      <p>Enter the absolute path to the directory containing your .zip files.</p>
-      <div class="grid">
-        <input type="text" id="zip-dir-path" placeholder="e.g., /Users/yourname/Documents/Archives" />
-        <button id="build-cache-btn">Build Cache</button>
-      </div>
-    </article>
-
-    <article>
-      <header>
-        <strong>2. Search Files</strong>
-      </header>
-      <div class="grid">
-        <input type="search" id="search-query" placeholder="e.g., report.docx" />
-        <input type="search" id="exclude-patterns" placeholder="Exclude patterns (e.g., *.tmp, *.log)" />
-        <input type="number" id="search-depth" placeholder="Search Depth" />
-        <select id="entry-type-select">
-          <option value="all">All</option>
-          <option value="file">File</option>
-          <option value="folder">Folder</option>
-        </select>
-        <button id="search-btn">Search</button>
-        <label>
-          <input type="checkbox" id="unique-results-checkbox" />
-          Show unique results
-        </label>
-      </div>
-    </article>
-
-    <article id="status-container" style="display: none;">
-      <header><strong>Status</strong></header>
-      <p id="status-messages"></p>
-    </article>
-
-    <article id="results-container" style="display: none;">
-      <header>
-        <strong id="results-header">Results</strong>
-        <div class="items-per-page-control">
-          <label for="items-per-page">Items per page:</label>
-          <select id="items-per-page">
-            <option value="20">20</option>
-            <option value="50">50</option>
-            <option value="150">150</option>
-            <!-- <option value="all">All</option> -->
-          </select>
-        </div>
-      </header>
-      <div class="grid">
-          <button id="bulk-extract-btn" disabled>Bulk Extract Selected</button>
-          <button id="extract-all-btn" disabled>Extract All</button>
-        </div>
-      <figure>
-        <table role="grid">
-          <thead>
-            <tr>
-              <th scope="col"><input type="checkbox" id="select-all-checkbox"></th>
-              <th scope="col">File/Folder Name</th>
-              <th scope="col">Type</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="results-tbody">
-            <!-- Hasil pencarian akan dimasukkan di sini oleh JavaScript -->
-          </tbody>
-        </table>
-      </figure>
-
-      <nav aria-label="Pagination" class="pagination-controls">
-        <ul>
-          <li><button id="prev-page-btn" role="link" disabled>Previous</button></li>
-          <li><span id="page-info">Page 1 of 1</span></li>
-          <li><button id="next-page-btn" role="link" disabled>Next</button></li>
-        </ul>
-      </nav>
-    </article>
-
-  </main>
+  <div id="root"></div>
 </body>
 
 </html>
