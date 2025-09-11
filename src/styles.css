@@ -1,12 +1,1 @@
-:root {
-  --pico-font-size: 100%;
-}
-
-main.container {
-  max-width: 800px;
-  padding-top: 2rem;
-}
-
-article {
-  margin-bottom: 1.5rem;
-}
+@import "tailwindcss";

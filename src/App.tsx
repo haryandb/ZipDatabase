@@ -229,42 +229,44 @@ function App() {
   };
 
   return (
-    <main className="container">
-      <header>
-        <h1>ZipCache</h1>
-        <p>Cache and search contents of large ZIP archives.</p>
+    <main className="max-w-4xl mx-auto p-4">
+      <header className="text-center mb-8">
+        <h1 className="text-4xl font-bold mb-2">ZipCache</h1>
+        <p className="text-lg text-gray-600">Cache and search contents of large ZIP archives.</p>
       </header>
 
-      <article>
-        <header>
-          <strong>1. Build Cache</strong>
+      <article className="bg-white shadow-md rounded-lg p-6 mb-4">
+        <header className="mb-4">
+          <strong className="text-xl font-semibold">1. Build Cache</strong>
         </header>
-        <p>Enter the absolute path to the directory containing your .zip files.</p>
-        <div className="grid">
+        <p className="mb-4">Enter the absolute path to the directory containing your .zip files.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <input
+            className="border border-gray-300 rounded-md p-2 w-full focus:ring-blue-500 focus:border-blue-500"
             type="text"
             id="zip-dir-path"
             placeholder="e.g., /Users/yourname/Documents/Archives"
             value={zipDirPath}
             onChange={(e) => setZipDirPath(e.target.value)}
           />
-          <button id="build-cache-btn" onClick={handleBuildCache} aria-busy={isBuildingCache} disabled={isBuildingCache}>
+          <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50" id="build-cache-btn" onClick={handleBuildCache} aria-busy={isBuildingCache} disabled={isBuildingCache}>
             Build Cache
           </button>
         </div>
       </article>
 
-      <article>
-        <header>
-          <strong>2. Search Files</strong>
+      <article className="bg-white shadow-md rounded-lg p-6 mb-4">
+        <header className="mb-4">
+          <strong className="text-xl font-semibold">2. Search Files</strong>
         </header>
-        <div className="grid">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <input
             type="search"
             id="search-query"
             placeholder="e.g., report.docx"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            className="border border-gray-300 rounded-md p-2 w-full focus:ring-blue-500 focus:border-blue-500"
           />
           <input
             type="search"
@@ -272,6 +274,7 @@ function App() {
             placeholder="Exclude patterns (e.g., *.tmp, *.log)"
             value={excludePatterns}
             onChange={(e) => setExcludePatterns(e.target.value)}
+            className="border border-gray-300 rounded-md p-2 w-full focus:ring-blue-500 focus:border-blue-500"
           />
           <input
             type="number"
@@ -279,38 +282,53 @@ function App() {
             placeholder="Search Depth"
             value={searchDepth === null ? '' : searchDepth}
             onChange={(e) => setSearchDepth(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+            className="border border-gray-300 rounded-md p-2 w-full focus:ring-blue-500 focus:border-blue-500"
           />
-          <select id="entry-type-select" value={entryType} onChange={(e) => setEntryType(e.target.value)}>
+          <select id="entry-type-select" value={entryType} onChange={(e) => setEntryType(e.target.value)}
+            className="border border-gray-300 rounded-md p-2 w-full focus:ring-blue-500 focus:border-blue-500"
+          >
             <option value="all">All</option>
             <option value="file">File</option>
             <option value="folder">Folder</option>
           </select>
-          <button id="search-btn" onClick={handleSearch} aria-busy={isSearching} disabled={isSearching}>
+          <button
+            id="search-btn"
+            onClick={handleSearch}
+            aria-busy={isSearching}
+            disabled={isSearching}
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+          >
             Search
           </button>
-          <label htmlFor="unique-results-checkbox">
+          <label htmlFor="unique-results-checkbox" className="flex items-center space-x-2">
             <input
               type="checkbox"
               id="unique-results-checkbox"
               checked={uniqueResults}
               onChange={(e) => setUniqueResults(e.target.checked)}
+              className="form-checkbox h-5 w-5 text-blue-600"
             />
-            Show unique results
+            <span>Show unique results</span>
           </label>
         </div>
       </article>
 
-      <article id="status-container" style={{ display: showStatusContainer ? 'block' : 'none' }}>
-        <header><strong>Status</strong></header>
-        <p id="status-messages">{statusMessage}</p>
+      <article id="status-container" className="bg-white shadow-md rounded-lg p-6 mb-4"
+        style={{ display: showStatusContainer ? 'block' : 'none' }}>
+        <header className="mb-2">
+          <strong className="text-xl font-semibold">Status</strong>
+        </header>
+        <p id="status-messages" className="text-gray-700">{statusMessage}</p>
       </article>
 
-      <article id="results-container" style={{ display: results.length > 0 || totalResults > 0 ? 'block' : 'none' }}>
-        <header>
-          <strong id="results-header">Results ({totalResults})</strong>
-          <div className="items-per-page-control">
-            <label htmlFor="items-per-page">Items per page:</label>
-            <select id="items-per-page" value={itemsPerPage} onChange={handleItemsPerPageChange}>
+      <article id="results-container" className="bg-white shadow-md rounded-lg p-6 mb-4"
+        style={{ display: results.length > 0 || totalResults > 0 ? 'block' : 'none' }}>
+        <header className="mb-4 flex justify-between items-center">
+          <strong id="results-header" className="text-xl font-semibold">Results ({totalResults})</strong>
+          <div className="items-per-page-control flex items-center space-x-2">
+            <label htmlFor="items-per-page" className="text-gray-700">Items per page:</label>
+            <select id="items-per-page" value={itemsPerPage} onChange={handleItemsPerPageChange}
+              className="border border-gray-300 rounded-md p-1 focus:ring-blue-500 focus:border-blue-500">
               <option value="20">20</option>
               <option value="50">50</option>
               <option value="150">150</option>
@@ -318,62 +336,66 @@ function App() {
             </select>
           </div>
         </header>
-        <div className="grid">
-            <button
-              id="bulk-extract-btn"
-              onClick={handleBulkExtract}
-              aria-busy={isExtractingBulk}
-              disabled={selectedFiles.size === 0 || isExtractingBulk}
-            >
-              Bulk Extract Selected ({selectedFiles.size})
-            </button>
-            <button
-              id="extract-all-btn"
-              onClick={handleExtractAll}
-              aria-busy={isExtractingAll}
-              disabled={totalResults === 0 || isExtractingAll}
-            >
-              Extract All ({totalResults})
-            </button>
-          </div>
-        <figure>
-          <table role="grid">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <button
+            id="bulk-extract-btn"
+            onClick={handleBulkExtract}
+            aria-busy={isExtractingBulk}
+            disabled={selectedFiles.size === 0 || isExtractingBulk}
+            className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50"
+          >
+            Bulk Extract Selected ({selectedFiles.size})
+          </button>
+          <button
+            id="extract-all-btn"
+            onClick={handleExtractAll}
+            aria-busy={isExtractingAll}
+            disabled={totalResults === 0 || isExtractingAll}
+            className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 disabled:opacity-50"
+          >
+            Extract All ({totalResults})
+          </button>
+        </div>
+        <figure className="overflow-x-auto">
+          <table className="min-w-full bg-white border border-gray-200">
             <thead>
               <tr>
-                <th scope="col">
+                <th scope="col" className="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">
                   <input
                     type="checkbox"
                     id="select-all-checkbox"
                     checked={selectedFiles.size === results.length && results.length > 0}
                     onChange={handleSelectAllChange}
+                    className="form-checkbox h-4 w-4 text-blue-600"
                   />
                 </th>
-                <th scope="col">File/Folder Name</th>
-                <th scope="col">Type</th>
-                <th scope="col">Actions</th>
+                <th scope="col" className="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">File/Folder Name</th>
+                <th scope="col" className="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Type</th>
+                <th scope="col" className="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Actions</th>
               </tr>
             </thead>
-            <tbody id="results-tbody">
+            <tbody>
               {results.length === 0 && totalResults === 0 && !isSearching ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center' }}>No results found.</td>
+                  <td colSpan={4} className="py-4 text-center text-gray-500">No results found.</td>
                 </tr>
               ) : (
                 results.map((entry) => (
-                  <tr key={entry.id}>
-                    <td>
+                  <tr key={entry.id} className="hover:bg-gray-50">
+                    <td className="py-2 px-4 border-b">
                       <input
                         type="checkbox"
                         checked={selectedFiles.has(entry.id)}
                         onChange={(e) => handleFileCheckboxChange(entry.id, e.target.checked)}
+                        className="form-checkbox h-4 w-4 text-blue-600"
                       />
                     </td>
-                    <td>{entry.full_path}</td>
-                    <td>{entry.is_folder ? 'Folder' : 'File'}</td>
-                    <td>
+                    <td className="py-2 px-4 border-b text-gray-800">{entry.full_path}</td>
+                    <td className="py-2 px-4 border-b text-gray-800">{entry.is_folder ? 'Folder' : 'File'}</td>
+                    <td className="py-2 px-4 border-b">
                       <button
                         onClick={() => handleExtractFile(entry)}
-                        className="pico-button pico-button--secondary pico-button--small"
+                        className="bg-blue-500 hover:bg-blue-700 text-white text-xs py-1 px-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
                       >
                         Extract
                       </button>
@@ -385,16 +407,18 @@ function App() {
           </table>
         </figure>
 
-        <nav aria-label="Pagination" className="pagination-controls">
+        <nav aria-label="Pagination" className="flex justify-center items-center space-x-4 mt-4">
           <ul>
             <li>
-              <button onClick={handlePrevPage} role="link" disabled={currentPage === 1 || isSearching}>
+              <button onClick={handlePrevPage} role="link" disabled={currentPage === 1 || isSearching}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-l disabled:opacity-50">
                 Previous
               </button>
             </li>
-            <li><span id="page-info">Page {currentPage} of {totalPages}</span></li>
+            <li><span id="page-info" className="py-2 px-4 bg-gray-100 text-gray-700">Page {currentPage} of {totalPages}</span></li>
             <li>
-              <button onClick={handleNextPage} role="link" disabled={currentPage === totalPages || totalPages === 0 || isSearching}>
+              <button onClick={handleNextPage} role="link" disabled={currentPage === totalPages || totalPages === 0 || isSearching}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-r disabled:opacity-50">
                 Next
               </button>
             </li>
